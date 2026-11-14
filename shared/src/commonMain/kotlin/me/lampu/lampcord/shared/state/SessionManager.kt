@@ -54,6 +54,8 @@ class SessionManager(
             }
     )
 
+    private var loginFingerprint: String? = null
+
     init {
         scope.launch {
 
@@ -91,6 +93,7 @@ class SessionManager(
     fun connect(token: String) {
         authApi.setToken(token)
         Settings.shared.discordToken = token
+        loginFingerprint = null
         navigationStore.isConnecting = true
         gatewayManager.connect(token)
         pushTokenRegistrar?.register()
@@ -115,6 +118,15 @@ class SessionManager(
         themeStore.close()
         authApi.rest.closeClient()
         scope.cancel()
+    }
+
+    fun signOut() {
+        val token = Settings.shared.discordToken.trim()
+        disconnect()
+        if (token.isNotEmpty()) {
+            tokenStore.removeAccount(token)
+            scope.launch { authApi.logoutRemote(token) }
+        }
     }
 
     fun switchAccount(token: String) {
@@ -146,14 +158,27 @@ class SessionManager(
         voiceStore.clear()
     }
 
-    suspend fun login(email: String, pass: String): LoginResponse? {
+    private suspend fun loginFlowFingerprint(): String {
+        loginFingerprint?.takeIf { it.isNotEmpty() }?.let { return it }
         val fingerprint = authApi.getFingerprint() ?: ""
-        return authApi.login(LoginRequest(email, pass), fingerprint)
+        loginFingerprint = fingerprint
+        return fingerprint
     }
 
-    suspend fun verifyMFA(ticket: String, code: String, type: String): LoginResponse? {
-        val fingerprint = authApi.getFingerprint() ?: ""
-        val res = authApi.loginMFA(MFALoginRequest(ticket, code), fingerprint, type)
+    suspend fun login(email: String, pass: String, undelete: Boolean = false): LoginResponse? {
+        val fingerprint = loginFlowFingerprint()
+        return authApi.login(LoginRequest(login = email, password = pass, undelete = undelete), fingerprint)
+    }
+
+    suspend fun verifyMFA(
+        code: String,
+        ticket: String,
+        type: String,
+        loginInstanceId: String? = null
+    ): LoginResponse? {
+        val fingerprint = loginFlowFingerprint()
+        val request = MFALoginRequest(code = code, ticket = ticket, login_instance_id = loginInstanceId)
+        val res = authApi.loginMFA(request, fingerprint, type)
         if (res?.token != null) {
             connect(res.token)
         }

@@ -38,6 +38,11 @@
     <string name="lampcord_language_description">Select your preferred language</string>
     <string name="lampcord_language_system">System</string>
     <string name="lampcord_language_system_description">Use your device language</string>
+    <string name="lampcord_login_backup_subtitle">Enter one of your backup codes.</string>
+    <string name="lampcord_login_mfa_subtitle">Enter the 6-digit code from your authenticator app.</string>
+    <string name="lampcord_login_restore_account">Restore account</string>
+    <string name="lampcord_login_subtitle">Use your Discord account to continue.</string>
+    <string name="lampcord_login_title">Sign in to Lampcord</string>
     <string name="lampcord_login_backup_code_label">8-digit backup code</string>
     <string name="lampcord_login_backup_title">Enter Backup Code</string>
     <string name="lampcord_login_error_captcha_cancelled">Captcha was cancelled.</string>

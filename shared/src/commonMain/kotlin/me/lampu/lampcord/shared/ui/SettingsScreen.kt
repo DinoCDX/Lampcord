@@ -222,7 +222,7 @@ fun SettingsScreen(
                 Button(
                     onClick = {
                         showLogoutConfirmation = false
-                        sessionManager.disconnect()
+                        sessionManager.signOut()
                         onDismiss()
                     },
                     modifier = Modifier.fillMaxWidth(),
