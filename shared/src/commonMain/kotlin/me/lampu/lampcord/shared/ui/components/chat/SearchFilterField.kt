@@ -1,25 +1,28 @@
 package me.lampu.lampcord.shared.ui.components.chat
 
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -30,7 +33,10 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.InputChip
+import androidx.compose.material3.InputChipDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SearchBarDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -38,20 +44,22 @@ import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.height
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextRange
@@ -67,6 +75,7 @@ import me.lampu.lampcord.shared.generated.resources.confirm
 import me.lampu.lampcord.shared.generated.resources.lampcord_settings_clear
 import me.lampu.lampcord.shared.generated.resources.search_filter_menu_title
 import me.lampu.lampcord.shared.model.AutocompleteType
+import me.lampu.lampcord.shared.settings.Settings
 import me.lampu.lampcord.shared.state.AutocompleteStore
 import me.lampu.lampcord.shared.state.NavigationStore
 import me.lampu.lampcord.shared.state.SEARCH_FILTER_DEFS
@@ -82,9 +91,8 @@ import kotlin.time.Instant
 
 private const val SEARCH_SENTINEL = "\u200B"
 
-private val ChipHeight = 28.dp
 
-data class SearchChip(val key: String, val value: String)
+data class SearchChip(val key: String, val value: String, val display: String = value)
 
 data class SearchSuggestion(
     val title: String,
@@ -110,30 +118,40 @@ class SearchInputState(
     private val navigationStore: NavigationStore,
     private val onQueryChange: (String) -> Unit,
     private val onFilterCommitted: () -> Unit,
+    private val chipDisplay: (key: String, value: String) -> String = { _, value -> value },
 ) {
     val chips = mutableStateListOf<SearchChip>()
-    var typed by mutableStateOf("")
+    var typed by mutableStateOf(TextFieldValue(""))
         private set
     var pendingDateKey by mutableStateOf<String?>(null)
     var selectedChip by mutableStateOf<Int?>(null)
     var fieldFocused by mutableStateOf(false)
+    /** When set, the input row should reveal the leading content (e.g. prefilled scope chip) instead of auto-scrolling to the end. */
+    var revealLeadingContent by mutableStateOf(false)
+        private set
+    private var contentRevision by mutableIntStateOf(0)
+    var focusRequest by mutableIntStateOf(0)
+        private set
 
-    val fieldValue: TextFieldValue
-        get() {
-            val text = SEARCH_SENTINEL + typed
-            return TextFieldValue(text, TextRange(text.length))
-        }
+    val typedText: String get() = typed.text
+
+    fun requestFocus() { focusRequest++ }
 
     fun setQuery(query: String) {
         val parsed = parseSearchQuery(query)
         chips.clear()
-        parsed.tokens.forEach { chips.add(SearchChip(it.key, it.value)) }
-        typed = parsed.text
+        parsed.tokens.forEach { chips.add(SearchChip(it.key, it.value, chipDisplay(it.key, it.value))) }
+        val text = parsed.text.ifEmpty { if (chips.isNotEmpty()) " " else "" }
+        typed = TextFieldValue(text, TextRange(text.length))
+        selectedChip = null
+        revealLeadingContent = true
+        contentRevision++
+        refreshAutocomplete()
     }
 
     fun toQuery(): String {
         val parts = chips.map { "${it.key}:${it.value}" }.toMutableList()
-        if (typed.isNotBlank()) parts.add(typed.trim())
+        if (typedText.isNotBlank()) parts.add(typedText.trim())
         return parts.joinToString(" ")
     }
 
@@ -144,37 +162,60 @@ class SearchInputState(
         return toQuery()
     }
 
-    fun onFieldChange(newValue: TextFieldValue) {
-        val raw = newValue.text
+    fun onTypedChange(next: TextFieldValue) {
         var committed = false
-        if (raw.startsWith(SEARCH_SENTINEL)) {
-            val next = raw.removePrefix(SEARCH_SENTINEL)
-            selectedChip = null
-            typed = next
-            if (next.endsWith(" ")) committed = commitCompletedWord()
-        } else if (typed.isEmpty()) {
-            val selected = selectedChip
-            if (selected != null && selected in chips.indices) {
-                chips.removeAt(selected)
-                selectedChip = null
-                committed = true
-            } else if (chips.isNotEmpty()) {
-                selectedChip = chips.lastIndex
-            }
-        } else {
-            typed = raw
-        }
+        selectedChip = null
+        typed = next
+        revealLeadingContent = false
+        contentRevision++
+        if (next.text.endsWith(" ")) committed = commitCompletedWord()
         openDateIfNeeded()
         publish()
         if (committed) onFilterCommitted()
         refreshAutocomplete()
     }
 
-    fun pickChip(key: String, value: String) {
-        typed = dropActiveWord()
-        chips.add(SearchChip(key, value))
+    fun onBackspaceAtStart(): Boolean {
+        if (typedText.isNotEmpty() && typedText != " ") return false
+        if (typedText == " " && chips.isNotEmpty()) {
+            // allow deleting the padding space first; if becomes empty next time handle chip
+            typed = TextFieldValue("", TextRange(0))
+            revealLeadingContent = false
+            contentRevision++
+            publish()
+            refreshAutocomplete()
+            return false
+        }
+        if (typedText.isNotEmpty()) return false
+        val selected = selectedChip
+        return if (selected != null && selected in chips.indices) {
+            chips.removeAt(selected)
+            selectedChip = null
+            revealLeadingContent = false
+            contentRevision++
+            publish()
+            refreshAutocomplete()
+            onFilterCommitted()
+            true
+        } else if (chips.isNotEmpty()) {
+            selectedChip = chips.lastIndex
+            true
+        } else {
+            false
+        }
+    }
+
+    fun pickChip(key: String, value: String, display: String = value) {
+        val text = dropActiveWord().let { if (it.isEmpty()) " " else "$it " }
+        typed = TextFieldValue(text, TextRange(text.length))
+        if (key == "in" || key == "sort") {
+            chips.removeAll { it.key == key }
+        }
+        chips.add(SearchChip(key, value, display))
         selectedChip = null
         pendingDateKey = null
+        revealLeadingContent = false
+        contentRevision++
         publish()
         refreshAutocomplete()
         onFilterCommitted()
@@ -182,12 +223,17 @@ class SearchInputState(
 
     fun startFilter(key: String) {
         commitCompletedWord()
-        typed = when {
-            typed.isBlank() -> "$key:"
-            typed.endsWith(" ") -> "$typed$key:"
-            else -> "$typed $key:"
+        val base = typedText
+        val text = when {
+            base.isBlank() -> "$key:"
+            base.endsWith(" ") -> "$base$key:"
+            else -> "$base $key:"
         }
+        typed = TextFieldValue(text, TextRange(text.length))
         selectedChip = null
+        revealLeadingContent = false
+        contentRevision++
+        requestFocus()
         openDateIfNeeded()
         publish()
         refreshAutocomplete()
@@ -195,15 +241,32 @@ class SearchInputState(
 
     fun cancelDate() {
         pendingDateKey = null
-        typed = dropActiveWord()
+        val text = dropActiveWord()
+        typed = TextFieldValue(text, TextRange(text.length))
+        revealLeadingContent = false
+        contentRevision++
         publish()
         refreshAutocomplete()
     }
 
+    fun removeChip(index: Int) {
+        if (index !in chips.indices) return
+        chips.removeAt(index)
+        selectedChip = null
+        if (chips.isNotEmpty() && typedText.isEmpty()) typed = TextFieldValue(" ", TextRange(1))
+        revealLeadingContent = false
+        contentRevision++
+        publish()
+        refreshAutocomplete()
+        onFilterCommitted()
+    }
+
     fun clearAll() {
         chips.clear()
-        typed = ""
+        typed = TextFieldValue("", TextRange(0))
         selectedChip = null
+        revealLeadingContent = false
+        contentRevision++
         publish()
         refreshAutocomplete()
         onFilterCommitted()
@@ -223,7 +286,7 @@ class SearchInputState(
                     subtitle = item.subtitle,
                     avatar = item.icon,
                     icon = item.iconType,
-                    onPick = { pickChip(key, item.searchReplacement ?: item.replacement) }
+                    onPick = { pickChip(key, item.searchReplacement ?: item.replacement, item.title) }
                 )
             }
             SearchFilterKind.CHOICE -> def.choices
@@ -253,22 +316,30 @@ class SearchInputState(
         onQueryChange(toQuery())
     }
 
-    private fun activeWord(): String = typed.substringAfterLast(' ')
+    private fun activeWord(): String = typedText.substringAfterLast(' ')
 
-    private fun dropActiveWord(): String = if (typed.contains(' ')) typed.substringBeforeLast(' ') else ""
+    private fun dropActiveWord(): String = if (typedText.contains(' ')) typedText.substringBeforeLast(' ') else ""
 
     private fun commitCompletedWord(): Boolean {
-        val trimmed = typed.trimEnd()
+        val trimmed = typedText.trimEnd()
         val word = trimmed.substringAfterLast(' ')
         val colon = word.indexOf(':')
         if (colon <= 0) return false
         val key = canonicalSearchKey(word.substring(0, colon)) ?: return false
         val value = word.substring(colon + 1)
         if (value.isEmpty()) return false
-        chips.add(SearchChip(key, value))
-        typed = if (trimmed.contains(' ')) trimmed.substringBeforeLast(' ') else ""
+        if (key == "in" || key == "sort") {
+            chips.removeAll { it.key == key }
+        }
+        chips.add(SearchChip(key, value, chipDisplay(key, value)))
+        val text = if (trimmed.contains(' ')) trimmed.substringBeforeLast(' ') else " "
+        typed = TextFieldValue(text, TextRange(text.length))
+        revealLeadingContent = false
+        contentRevision++
         return true
     }
+
+    internal fun contentVersion(): Int = contentRevision
 
     private fun refreshAutocomplete() {
         val word = activeWord()
@@ -294,7 +365,7 @@ class SearchInputState(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchInputBar(
     state: SearchInputState,
@@ -307,72 +378,114 @@ fun SearchInputBar(
     var focused by remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
     val interactionSource = remember { MutableInteractionSource() }
+    val scrollState = rememberScrollState()
 
     LaunchedEffect(externalQuery) {
-        if (externalQuery.isNotEmpty() && externalQuery != state.toQuery()) state.setQuery(externalQuery)
+        if (externalQuery != state.toQuery()) state.setQuery(externalQuery)
     }
 
-    Row(
-        modifier = modifier
-            .clip(RoundedCornerShape(24.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .border(
-                1.dp,
-                if (focused) MaterialTheme.colorScheme.primary.copy(alpha = 0.6f) else Color.Transparent,
-                RoundedCornerShape(24.dp)
-            )
-            .padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp)
-            .clickable(interactionSource = interactionSource, indication = null) {
-                focusRequester.requestFocus()
-            },
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(
-            imageVector = Icons.Filled.Search,
-            contentDescription = null,
-            modifier = Modifier.size(18.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(Modifier.width(8.dp))
-        FlowRow(
-            modifier = Modifier.weight(1f),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            state.chips.forEachIndexed { index, chip ->
-                SearchChipView(chip, selected = state.selectedChip == index, onClick = { state.selectedChip = index })
-            }
-            BasicTextField(
-                value = state.fieldValue,
-                onValueChange = { state.onFieldChange(it) },
-                modifier = Modifier
-                    .focusRequester(focusRequester)
-                    .defaultMinSize(minWidth = 96.dp)
-                    .height(ChipHeight)
-                    .onFocusChanged {
-                        focused = it.isFocused
-                        state.fieldFocused = it.isFocused
-                    },
-                textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
-                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = { onSearch() }),
-                decorationBox = { innerTextField ->
-                    Box(modifier = Modifier.fillMaxHeight(), contentAlignment = Alignment.CenterStart) {
-                        if (state.typed.isEmpty() && state.chips.isEmpty()) {
-                            Text(
-                                text = placeholder,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                            )
-                        }
-                        innerTextField()
-                    }
-                }
-            )
+    LaunchedEffect(state.contentVersion(), state.revealLeadingContent) {
+        if (state.revealLeadingContent) {
+            scrollState.scrollTo(0)
+        } else {
+            scrollState.scrollTo(scrollState.maxValue)
         }
-        trailing()
+    }
+
+    LaunchedEffect(state.focusRequest) {
+        if (state.focusRequest > 0) focusRequester.requestFocus()
+    }
+
+    val containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+
+    Surface(
+        modifier = modifier,
+        shape = SearchBarDefaults.inputFieldShape,
+        color = containerColor,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .clickable(interactionSource = interactionSource, indication = null) {
+                    focusRequester.requestFocus()
+                }
+                .padding(start = 16.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Search,
+                contentDescription = null,
+                modifier = Modifier.size(24.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.width(16.dp))
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .horizontalScroll(scrollState)
+                    .then(
+                        if (Settings.shared.reduceMotion) Modifier
+                        else Modifier.animateContentSize(animationSpec = spring(dampingRatio = 0.9f, stiffness = 500f))
+                    ),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                state.chips.forEachIndexed { index, chip ->
+                    SearchChipView(
+                        chip = chip,
+                        selected = state.selectedChip == index,
+                        onRemove = { state.removeChip(index) },
+                        onClick = {
+                            state.selectedChip = if (state.selectedChip == index) null else index
+                            focusRequester.requestFocus()
+                        }
+                    )
+                }
+                BasicTextField(
+                    value = state.typed,
+                    onValueChange = { state.onTypedChange(it) },
+                    modifier = Modifier
+                        .focusRequester(focusRequester)
+                        .widthIn(min = if (state.chips.isEmpty()) 120.dp else 48.dp)
+                        .defaultMinSize(minWidth = if (state.chips.isEmpty()) 120.dp else 48.dp)
+                        .onPreviewKeyEvent { event ->
+                            if (event.type == KeyEventType.KeyDown && event.key == Key.Backspace) {
+                                state.onBackspaceAtStart()
+                            } else {
+                                false
+                            }
+                        }
+                        .onFocusChanged {
+                            focused = it.isFocused
+                            state.fieldFocused = it.isFocused
+                        },
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = { onSearch() }),
+                    decorationBox = { innerTextField ->
+                        Box(contentAlignment = Alignment.CenterStart) {
+                            if (state.typedText.isEmpty() && state.chips.isEmpty()) {
+                                Text(
+                                    text = placeholder,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            innerTextField()
+                        }
+                    }
+                )
+            }
+            trailing()
+        }
     }
 
     state.pendingDateKey?.let { key ->
@@ -388,27 +501,63 @@ fun SearchInputBar(
 }
 
 @Composable
-private fun SearchChipView(chip: SearchChip, selected: Boolean, onClick: () -> Unit) {
-    Surface(
+private fun SearchChipView(chip: SearchChip, selected: Boolean, onRemove: () -> Unit, onClick: () -> Unit) {
+    val containerColor = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainer
+    val contentColor = if (selected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+    InputChip(
+        selected = selected,
         onClick = onClick,
-        modifier = Modifier.height(ChipHeight),
-        shape = RoundedCornerShape(8.dp),
-        color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest,
-        border = BorderStroke(
-            1.dp,
-            if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
-        )
-    ) {
-        Row(
-            modifier = Modifier.fillMaxHeight().padding(horizontal = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        label = {
             Text(
-                text = "${chip.key}: ${chip.value}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+                text = "${chip.key}: ${chip.display}",
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.labelLarge
+            )
+        },
+        modifier = Modifier.heightIn(min = 36.dp),
+        shape = MaterialTheme.shapes.medium,
+        border = InputChipDefaults.inputChipBorder(
+            enabled = true,
+            selected = selected,
+            borderColor = if (selected) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
+            selectedBorderColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.8f)
+        ),
+        colors = InputChipDefaults.inputChipColors(
+            containerColor = containerColor,
+            labelColor = contentColor,
+            selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+            selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer
+        )
+    )
+}
+
+@Composable
+fun SearchFilterButton(state: SearchInputState, modifier: Modifier = Modifier) {
+    var showMenu by remember { mutableStateOf(false) }
+    Box(modifier = modifier) {
+        IconButton(onClick = { showMenu = true }) {
+            Icon(
+                imageVector = Icons.Rounded.Tune,
+                contentDescription = stringResource(Res.string.search_filter_menu_title)
+            )
+        }
+        SearchFilterMenu(
+            expanded = showMenu,
+            onDismiss = { showMenu = false },
+            onPick = { def -> state.startFilter(def.key) }
+        )
+    }
+}
+
+@Composable
+fun SearchClearButton(state: SearchInputState, modifier: Modifier = Modifier) {
+    if (state.typedText.isNotEmpty() || state.chips.isNotEmpty()) {
+        IconButton(onClick = { state.clearAll() }, modifier = modifier) {
+            Icon(
+                imageVector = Icons.Filled.Close,
+                contentDescription = stringResource(Res.string.lampcord_settings_clear),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
@@ -416,32 +565,9 @@ private fun SearchChipView(chip: SearchChip, selected: Boolean, onClick: () -> U
 
 @Composable
 fun SearchFilterActions(state: SearchInputState) {
-    var showMenu by remember { mutableStateOf(false) }
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Box {
-            IconButton(onClick = { showMenu = true }, modifier = Modifier.size(36.dp)) {
-                Icon(
-                    imageVector = Icons.Rounded.Tune,
-                    contentDescription = stringResource(Res.string.search_filter_menu_title),
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-            SearchFilterMenu(
-                expanded = showMenu,
-                onDismiss = { showMenu = false },
-                onPick = { def -> state.startFilter(def.key) }
-            )
-        }
-        if (state.typed.isNotEmpty() || state.chips.isNotEmpty()) {
-            IconButton(onClick = { state.clearAll() }, modifier = Modifier.size(36.dp)) {
-                Icon(
-                    imageVector = Icons.Filled.Close,
-                    contentDescription = stringResource(Res.string.lampcord_settings_clear),
-                    modifier = Modifier.size(16.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
+        SearchFilterButton(state, modifier = Modifier.size(40.dp))
+        SearchClearButton(state, modifier = Modifier.size(40.dp))
     }
 }
 
