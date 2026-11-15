@@ -181,6 +181,7 @@ fun LoginScreen(
     sessionManager: SessionManager = koinInject(),
     remoteAuthClient: RemoteAuthClient = koinInject(),
     settingsStore: SettingsStore = koinInject(),
+    onBack: (() -> Unit)? = null,
     onLoginSuccess: () -> Unit
 ) {
     val isMobile = remember {
@@ -216,6 +217,7 @@ fun LoginScreen(
     val passwordFocus = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
     val remoteAuthState by remoteAuthClient.state.collectAsState()
+    val staleRemoteAuth = remember { remoteAuthClient.state.value as? RemoteAuthState.Finished }
 
     val enterTokenError = stringResource(Res.string.lampcord_login_error_enter_token)
     val loginFailedError = stringResource(Res.string.lampcord_login_error_failed)
@@ -245,8 +247,9 @@ fun LoginScreen(
     }
 
     fun busy(block: suspend () -> Unit) {
+        if (isLoading) return
+        isLoading = true
         scope.launch {
-            isLoading = true
             try {
                 block()
             } catch (e: CancellationException) {
@@ -324,6 +327,7 @@ fun LoginScreen(
             loginInstanceId = mfaInstanceId
         )
         if (res?.token != null) {
+            password = ""
             onLoginSuccess()
         } else {
             errorMessage = res?.message ?: invalidMfaError
@@ -337,6 +341,7 @@ fun LoginScreen(
             response == null -> errorMessage = loginFailedError
             response.captchaCancelled -> errorMessage = captchaCancelledError
             response.token != null -> {
+                password = ""
                 sessionManager.connect(response.token)
                 onLoginSuccess()
             }
@@ -413,6 +418,7 @@ fun LoginScreen(
                     errorMessage = enterTokenError
                 } else {
                     sessionManager.connect(authToken)
+                    token = ""
                     onLoginSuccess()
                 }
             }
@@ -450,17 +456,21 @@ fun LoginScreen(
 
     LaunchedEffect(remoteAuthState) {
         val state = remoteAuthState
-        if (state is RemoteAuthState.Finished) {
+        if (state is RemoteAuthState.Finished && state != staleRemoteAuth) {
             sessionManager.connect(state.token)
             onLoginSuccess()
         }
     }
 
-    val backAction: (() -> Unit)? = when (step) {
-        LoginStep.Credentials -> null
+    val stepBack: (() -> Unit)? = when (step) {
+        LoginStep.Credentials -> onBack
         LoginStep.Mfa -> ({ leaveMfa() })
         LoginStep.Verification -> ({ leaveVerification() })
         else -> ({ openStep(LoginStep.Credentials) })
+    }
+    val backAction: (() -> Unit)? = stepBack?.let { action ->
+        val guarded: () -> Unit = { if (!isLoading) action() }
+        guarded
     }
 
     PlatformBackHandler(enabled = backAction != null) { backAction?.invoke() }

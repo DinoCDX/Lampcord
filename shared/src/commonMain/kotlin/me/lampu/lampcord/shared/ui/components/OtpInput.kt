@@ -38,8 +38,8 @@ fun OtpInput(
     keyboardActions: KeyboardActions = KeyboardActions.Default
 ) {
     val focusRequester = remember { FocusRequester() }
-    LaunchedEffect(autoFocus) {
-        if (autoFocus) focusRequester.requestFocus()
+    LaunchedEffect(autoFocus, enabled) {
+        if (autoFocus && enabled) runCatching { focusRequester.requestFocus() }
     }
     BasicTextField(
         value = value,

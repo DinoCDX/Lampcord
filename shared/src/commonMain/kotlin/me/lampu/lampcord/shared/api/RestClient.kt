@@ -155,13 +155,21 @@ fun HttpRequestBuilder.loginHeaders(rest: RestClient, fingerprint: String? = nul
     header("Referer", "https://discord.com/login")
 }
 
+private var cachedInstallationId: String? = null
+
 private fun installationId(): String {
+    cachedInstallationId?.let { return it }
     val saved = Settings.shared.installationId
-    if (saved.isNotBlank()) return saved
-    val hex = (1..32).joinToString("") { Random.nextInt(16).toString(16) }
-    val created = "${hex.substring(0, 8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}"
-    Settings.shared.installationId = created
-    return created
+    val id = if (saved.isNotBlank()) {
+        saved
+    } else {
+        val hex = (1..32).joinToString("") { Random.nextInt(16).toString(16) }
+        val created = "${hex.substring(0, 8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}"
+        Settings.shared.installationId = created
+        created
+    }
+    cachedInstallationId = id
+    return id
 }
 
 fun createHttpClient(captcha: CaptchaCoordinator) = HttpClient(httpClientEngine()) {

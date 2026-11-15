@@ -11,6 +11,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
@@ -23,13 +24,13 @@ import me.lampu.lampcord.shared.model.LoginResponse
 import me.lampu.lampcord.shared.model.MFALoginRequest
 import me.lampu.lampcord.shared.utils.Logging
 
-private const val NETWORK_ERROR_MESSAGE = "Could not reach Discord. Check your connection and try again."
 sealed class ForgotPasswordResult {
     data object Sent : ForgotPasswordResult()
     data object PhoneVerificationRequired : ForgotPasswordResult()
     data class Failed(val message: String) : ForgotPasswordResult()
 }
 
+private const val NETWORK_ERROR_MESSAGE = "Could not reach Discord. Check your connection and try again."
 private const val PASSWORD_UPDATE_MESSAGE =
     "Discord needs you to change your password before you can sign in. Update it on discord.com, then try again."
 
@@ -46,6 +47,8 @@ class AuthApi(
             rest.httpClient.get("${rest.apiBase}/experiments") {
                 loginHeaders(rest)
             }.body<FingerprintResponse>().fingerprint
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logging.e("Gateway", "Error fetching fingerprint: ${e.message}")
             null
@@ -64,6 +67,8 @@ class AuthApi(
             }
         } catch (e: CaptchaCancelledException) {
             LoginResponse(captchaCancelled = true)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logging.e("Auth", "Error logging in: ${e.message}")
             networkFailure()
@@ -87,6 +92,8 @@ class AuthApi(
             }
         } catch (e: CaptchaCancelledException) {
             LoginResponse(captchaCancelled = true)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logging.e("Auth", "Error verifying MFA: ${e.message}")
             networkFailure()
@@ -115,7 +122,7 @@ class AuthApi(
                     Result.success(phone)
                 }
             } else {
-                Logging.e("Auth", "SMS MFA: send failed HTTP ${response.status.value}, body: ${body.take(300)}")
+                Logging.e("Auth", "SMS MFA: send failed HTTP ${response.status.value}, discord code ${rest.discordError(body)?.code}")
                 val discord = rest.discordError(body)
                 val message = httpFallbackMessage(
                     status = response.status.value,
@@ -124,6 +131,8 @@ class AuthApi(
                 )
                 Result.failure(IllegalStateException(message))
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logging.e("Auth", "Error sending MFA SMS: ${e.message}")
             Result.failure(IllegalStateException(NETWORK_ERROR_MESSAGE))
@@ -151,6 +160,8 @@ class AuthApi(
             } else {
                 Result.failure(IllegalStateException(verificationFailureMessage(body, response.status.value)))
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logging.e("Auth", "Phone verification error: ${e.message}")
             Result.failure(IllegalStateException(NETWORK_ERROR_MESSAGE))
@@ -170,6 +181,8 @@ class AuthApi(
             } else {
                 Result.failure(IllegalStateException(verificationFailureMessage(response.bodyAsText(), response.status.value)))
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logging.e("Auth", "Phone resend error: ${e.message}")
             Result.failure(IllegalStateException(NETWORK_ERROR_MESSAGE))
@@ -191,6 +204,8 @@ class AuthApi(
                 Logging.e("Auth", "Login verification: authorize-ip HTTP ${response.status.value}")
                 Result.failure(IllegalStateException(verificationFailureMessage(body, response.status.value)))
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logging.e("Auth", "Login verification error: ${e.message}")
             Result.failure(IllegalStateException(NETWORK_ERROR_MESSAGE))
@@ -227,6 +242,8 @@ class AuthApi(
                     )
                 )
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logging.e("Auth", "Forgot password error: ${e.message}")
             ForgotPasswordResult.Failed(NETWORK_ERROR_MESSAGE)
@@ -241,6 +258,8 @@ class AuthApi(
                 contentType(ContentType.Application.Json)
                 setBody(buildJsonObject { })
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logging.e("Auth", "Error logging out remotely: ${e.message}")
         }
@@ -259,6 +278,8 @@ class AuthApi(
             } else {
                 null
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logging.e("Auth", "Error exchanging remote auth ticket: ${e.message}")
             null
@@ -276,6 +297,8 @@ class AuthApi(
             } else {
                 null
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             null
         }
