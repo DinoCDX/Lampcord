@@ -170,6 +170,9 @@ class SessionManager(
         return authApi.login(LoginRequest(login = email, password = pass, undelete = undelete), fingerprint)
     }
 
+    suspend fun sendMfaSms(ticket: String): Result<String> =
+        authApi.sendMfaSms(ticket, loginFlowFingerprint())
+
     suspend fun verifyMFA(
         code: String,
         ticket: String,

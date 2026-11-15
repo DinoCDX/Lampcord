@@ -38,6 +38,11 @@
     <string name="lampcord_language_description">Select your preferred language</string>
     <string name="lampcord_language_system">System</string>
     <string name="lampcord_language_system_description">Use your device language</string>
+    <string name="lampcord_login_passkey_only">This account only has a passkey, which Lampcord doesn't support yet. Sign in with a backup code or authenticator app instead, or use Discord in a browser.</string>
+    <string name="lampcord_login_resend_sms">Resend code</string>
+    <string name="lampcord_login_sms_subtitle">Enter the 6-digit code sent to %1$s.</string>
+    <string name="lampcord_login_sms_title">Enter SMS Code</string>
+    <string name="lampcord_login_use_sms">Send code by SMS</string>
     <string name="lampcord_login_backup_subtitle">Enter one of your backup codes.</string>
     <string name="lampcord_login_mfa_subtitle">Enter the 6-digit code from your authenticator app.</string>
     <string name="lampcord_login_restore_account">Restore account</string>

@@ -13,6 +13,7 @@ import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import me.lampu.lampcord.shared.model.FingerprintResponse
@@ -21,6 +22,10 @@ import me.lampu.lampcord.shared.model.LoginRequest
 import me.lampu.lampcord.shared.model.LoginResponse
 import me.lampu.lampcord.shared.model.MFALoginRequest
 import me.lampu.lampcord.shared.utils.Logging
+
+private const val NETWORK_ERROR_MESSAGE = "Could not reach Discord. Check your connection and try again."
+private const val PASSWORD_UPDATE_MESSAGE =
+    "Discord needs you to change your password before you can sign in. Update it on discord.com, then try again."
 
 class AuthApi(
     val rest: RestClient,
@@ -32,10 +37,9 @@ class AuthApi(
 
     suspend fun getFingerprint(): String? {
         return try {
-            val response: FingerprintResponse = rest.httpClient.get("${rest.apiBase}/experiments") {
+            rest.httpClient.get("${rest.apiBase}/experiments") {
                 loginHeaders(rest)
-            }.body()
-            response.fingerprint
+            }.body<FingerprintResponse>().fingerprint
         } catch (e: Exception) {
             Logging.e("Gateway", "Error fetching fingerprint: ${e.message}")
             null
@@ -47,29 +51,18 @@ class AuthApi(
             val response = postLogin(request, fingerprint)
             val body = response.bodyAsText()
             if (response.status.isSuccess()) {
-                val decoded = decodeLogin(body) ?: return null
-                completeLogin(decoded)
+                decodeLogin(body)?.let { completeLogin(it) }
             } else {
-                Logging.e("Auth", "Login failed with status: ${response.status}, captchaRejected=${isCaptchaResponseBody(body)}")
+                Logging.e("Auth", "Login failed with status ${response.status.value}")
                 loginFailure(body, response.status.value)
             }
         } catch (e: CaptchaCancelledException) {
             LoginResponse(captchaCancelled = true)
         } catch (e: Exception) {
             Logging.e("Auth", "Error logging in: ${e.message}")
-            LoginResponse(
-                message = "Could not reach Discord. Check your connection and try again.",
-                failure = LoginFailure.NETWORK
-            )
+            networkFailure()
         }
     }
-
-    private suspend fun postLogin(request: LoginRequest, fingerprint: String): HttpResponse =
-        rest.httpClient.post("${rest.apiBase}/auth/login") {
-            loginHeaders(rest, fingerprint)
-            contentType(ContentType.Application.Json)
-            setBody(request)
-        }
 
     suspend fun loginMFA(request: MFALoginRequest, fingerprint: String, type: String): LoginResponse? {
         return try {
@@ -82,81 +75,47 @@ class AuthApi(
             if (response.status.isSuccess()) {
                 decodeLogin(body)?.let { completeLogin(it) }
             } else {
-                Logging.e("Auth", "MFA failed with status: ${response.status}")
-                LoginResponse(message = mfaErrorMessage(rest, body, response.status.value))
+                Logging.e("Auth", "MFA ($type) failed with status ${response.status.value}")
+                LoginResponse(message = mfaFailureMessage(body, response.status.value))
             }
         } catch (e: CaptchaCancelledException) {
             LoginResponse(captchaCancelled = true)
         } catch (e: Exception) {
             Logging.e("Auth", "Error verifying MFA: ${e.message}")
-            LoginResponse(
-                message = "Could not reach Discord. Check your connection and try again.",
-                failure = LoginFailure.NETWORK
-            )
+            networkFailure()
         }
     }
 
-    private fun decodeLogin(body: String): LoginResponse? =
-        runCatching { rest.json.decodeFromString<LoginResponse>(body) }.getOrNull()
-
-    private suspend fun completeLogin(response: LoginResponse): LoginResponse {
-        val token = response.token ?: return response
-        val passwordUpdateRequired = response.required_actions.orEmpty()
-            .any { it.toString().contains("update_password") }
-        if (!passwordUpdateRequired) return response
-        logoutRemote(token)
-        return LoginResponse(
-            user_id = response.user_id,
-            message = "Discord needs you to change your password before you can sign in. Update it on discord.com, then try again.",
-            failure = LoginFailure.PASSWORD_UPDATE_REQUIRED
-        )
-    }
-
-    private fun loginFailure(body: String, status: Int): LoginResponse {
-        val discord = rest.discordError(body)
-        val code = discord?.code
-        val failure = when {
-            status == 403 && body.contains("suspended_user_token") -> LoginFailure.SUSPENDED
-            status == 429 -> LoginFailure.RATE_LIMITED
-            status in 500..599 -> LoginFailure.SERVER_ERROR
-            isCaptchaResponseBody(body) -> LoginFailure.CAPTCHA_REJECTED
-            code == 70007 -> LoginFailure.VERIFICATION_REQUIRED
-            code == 20013 -> LoginFailure.ACCOUNT_DISABLED
-            code == 20011 -> LoginFailure.ACCOUNT_SCHEDULED_FOR_DELETION
-            status == 401 || code == 50035 ||
-                (status == 400 && body.contains("password", ignoreCase = true)) -> LoginFailure.INVALID_CREDENTIALS
-            else -> LoginFailure.UNKNOWN
-        }
-        return LoginResponse(
-            code = code,
-            message = loginFailureMessage(failure, discord?.message, status),
-            failure = failure
-        )
-    }
-
-    private fun loginFailureMessage(failure: LoginFailure, discordMessage: String?, status: Int): String =
-        when (failure) {
-            LoginFailure.SUSPENDED -> "This account has been suspended by Discord. You can appeal the suspension on discord.com."
-            LoginFailure.RATE_LIMITED -> "Discord is rate limiting login attempts. Wait a moment and try again."
-            LoginFailure.SERVER_ERROR -> "Discord is having trouble right now (HTTP $status). Try again in a moment."
-            LoginFailure.CAPTCHA_REJECTED -> "Discord rejected the captcha. Try again."
-            LoginFailure.VERIFICATION_REQUIRED -> "Discord needs to verify this login from a new location. Check your email or phone, complete the verification, then sign in again."
-            LoginFailure.ACCOUNT_DISABLED -> "This account is disabled. You can restore it to sign in."
-            LoginFailure.ACCOUNT_SCHEDULED_FOR_DELETION -> "This account is scheduled for deletion. You can restore it to sign in."
-            LoginFailure.INVALID_CREDENTIALS -> "Invalid email or password."
-            else -> discordMessage?.takeIf { it.isNotBlank() } ?: "Login failed (HTTP $status)."
-        }
-
-    private fun mfaErrorMessage(rest: RestClient, body: String, status: Int): String {
-        val discord = rest.discordError(body)
-        return when {
-            status == 401 -> "That code is invalid or has expired."
-            status == 429 -> "Discord is rate limiting login attempts. Wait a moment and try again."
-            status in 500..599 -> "Discord is having trouble right now (HTTP $status). Try again in a moment."
-            isCaptchaResponseBody(body) -> "Discord rejected the captcha. Try again."
-            discord?.code == 50035 -> "That code is invalid or has expired."
-            !discord?.message.isNullOrBlank() -> discord.message
-            else -> "Could not verify that code (HTTP $status)."
+    suspend fun sendMfaSms(ticket: String, fingerprint: String): Result<String> {
+        return try {
+            val response = rest.httpClient.post("${rest.apiBase}/auth/mfa/sms/send") {
+                loginHeaders(rest, fingerprint)
+                contentType(ContentType.Application.Json)
+                setBody(buildJsonObject { put("ticket", ticket) })
+            }
+            val body = response.bodyAsText()
+            if (response.status.isSuccess()) {
+                val phone = runCatching {
+                    rest.json.parseToJsonElement(body).jsonObject["phone"]?.jsonPrimitive?.content
+                }.getOrNull()
+                if (phone.isNullOrBlank()) {
+                    Result.failure(IllegalStateException("Discord did not return a phone number."))
+                } else {
+                    Result.success(phone)
+                }
+            } else {
+                Logging.e("Auth", "Send MFA SMS failed with status ${response.status.value}")
+                val discord = rest.discordError(body)
+                val message = httpFallbackMessage(
+                    status = response.status.value,
+                    discordMessage = discord?.message?.takeIf { it.isNotBlank() },
+                    fallback = "Could not send the SMS code (HTTP ${response.status.value})."
+                )
+                Result.failure(IllegalStateException(message))
+            }
+        } catch (e: Exception) {
+            Logging.e("Auth", "Error sending MFA SMS: ${e.message}")
+            Result.failure(IllegalStateException(NETWORK_ERROR_MESSAGE))
         }
     }
 
@@ -200,7 +159,87 @@ class AuthApi(
             if (response.status.isSuccess()) {
                 val body = response.body<JsonObject>()
                 body["url"]?.jsonPrimitive?.content
-            } else null
-        } catch (e: Exception) { null }
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            null
+        }
     }
+
+    private suspend fun postLogin(request: LoginRequest, fingerprint: String): HttpResponse =
+        rest.httpClient.post("${rest.apiBase}/auth/login") {
+            loginHeaders(rest, fingerprint)
+            contentType(ContentType.Application.Json)
+            setBody(request)
+        }
+
+    private fun decodeLogin(body: String): LoginResponse? =
+        runCatching { rest.json.decodeFromString<LoginResponse>(body) }.getOrNull()
+
+    private suspend fun completeLogin(response: LoginResponse): LoginResponse {
+        val token = response.token ?: return response
+        val passwordUpdateRequired = response.required_actions.orEmpty()
+            .any { it.toString().contains("update_password") }
+        if (!passwordUpdateRequired) return response
+        logoutRemote(token)
+        return LoginResponse(
+            user_id = response.user_id,
+            message = PASSWORD_UPDATE_MESSAGE,
+            failure = LoginFailure.PASSWORD_UPDATE_REQUIRED
+        )
+    }
+
+    private fun loginFailure(body: String, status: Int): LoginResponse {
+        val discord = rest.discordError(body)
+        val code = discord?.code
+        val failure = when {
+            status == 403 && body.contains("suspended_user_token") -> LoginFailure.SUSPENDED
+            status == 429 -> LoginFailure.RATE_LIMITED
+            status in 500..599 -> LoginFailure.SERVER_ERROR
+            isCaptchaResponseBody(body) -> LoginFailure.CAPTCHA_REJECTED
+            code == 70007 -> LoginFailure.VERIFICATION_REQUIRED
+            code == 20013 -> LoginFailure.ACCOUNT_DISABLED
+            code == 20011 -> LoginFailure.ACCOUNT_SCHEDULED_FOR_DELETION
+            status == 401 || code == 50035 ||
+                (status == 400 && body.contains("password", ignoreCase = true)) -> LoginFailure.INVALID_CREDENTIALS
+            else -> LoginFailure.UNKNOWN
+        }
+        val message = when (failure) {
+            LoginFailure.SUSPENDED -> "This account has been suspended by Discord. You can appeal the suspension on discord.com."
+            LoginFailure.RATE_LIMITED -> "Discord is rate limiting login attempts. Wait a moment and try again."
+            LoginFailure.SERVER_ERROR -> "Discord is having trouble right now (HTTP $status). Try again in a moment."
+            LoginFailure.CAPTCHA_REJECTED -> "Discord rejected the captcha. Try again."
+            LoginFailure.VERIFICATION_REQUIRED ->
+                "Discord needs to verify this login from a new location. Check your email or phone, complete the verification, then sign in again."
+            LoginFailure.ACCOUNT_DISABLED -> "This account is disabled. You can restore it to sign in."
+            LoginFailure.ACCOUNT_SCHEDULED_FOR_DELETION -> "This account is scheduled for deletion. You can restore it to sign in."
+            LoginFailure.INVALID_CREDENTIALS -> "Invalid email or password."
+            else -> httpFallbackMessage(status, discord?.message?.takeIf { it.isNotBlank() }, "Login failed (HTTP $status).")
+        }
+        return LoginResponse(code = code, message = message, failure = failure)
+    }
+
+    private fun mfaFailureMessage(body: String, status: Int): String {
+        val discord = rest.discordError(body)
+        return when {
+            status == 401 || discord?.code == 50035 -> "That code is invalid or has expired."
+            isCaptchaResponseBody(body) -> "Discord rejected the captcha. Try again."
+            else -> httpFallbackMessage(
+                status = status,
+                discordMessage = discord?.message?.takeIf { it.isNotBlank() },
+                fallback = "Could not verify that code (HTTP $status)."
+            )
+        }
+    }
+
+    private fun httpFallbackMessage(status: Int, discordMessage: String?, fallback: String): String = when {
+        status == 429 -> "Discord is rate limiting requests. Wait a moment and try again."
+        status in 500..599 -> "Discord is having trouble right now (HTTP $status). Try again in a moment."
+        discordMessage != null -> discordMessage
+        else -> fallback
+    }
+
+    private fun networkFailure(): LoginResponse =
+        LoginResponse(message = NETWORK_ERROR_MESSAGE, failure = LoginFailure.NETWORK)
 }
