@@ -24,6 +24,12 @@ import me.lampu.lampcord.shared.model.MFALoginRequest
 import me.lampu.lampcord.shared.utils.Logging
 
 private const val NETWORK_ERROR_MESSAGE = "Could not reach Discord. Check your connection and try again."
+sealed class ForgotPasswordResult {
+    data object Sent : ForgotPasswordResult()
+    data object PhoneVerificationRequired : ForgotPasswordResult()
+    data class Failed(val message: String) : ForgotPasswordResult()
+}
+
 private const val PASSWORD_UPDATE_MESSAGE =
     "Discord needs you to change your password before you can sign in. Update it on discord.com, then try again."
 
@@ -198,6 +204,62 @@ class AuthApi(
             discordMessage = discord?.message?.takeIf { it.isNotBlank() },
             fallback = "Could not verify this login (HTTP $status)."
         )
+    }
+
+    suspend fun forgotPassword(login: String, fingerprint: String): ForgotPasswordResult {
+        return try {
+            val response = rest.httpClient.post("${rest.apiBase}/auth/forgot") {
+                loginHeaders(rest, fingerprint)
+                contentType(ContentType.Application.Json)
+                setBody(buildJsonObject { put("login", login) })
+            }
+            val body = response.bodyAsText()
+            Logging.i("Auth", "Forgot password: HTTP ${response.status.value}")
+            val discord = rest.discordError(body)
+            when {
+                response.status.isSuccess() -> ForgotPasswordResult.Sent
+                discord?.code == 70007 -> ForgotPasswordResult.PhoneVerificationRequired
+                else -> ForgotPasswordResult.Failed(
+                    httpFallbackMessage(
+                        status = response.status.value,
+                        discordMessage = discord?.message?.takeIf { it.isNotBlank() },
+                        fallback = "Could not start a password reset (HTTP ${response.status.value})."
+                    )
+                )
+            }
+        } catch (e: Exception) {
+            Logging.e("Auth", "Forgot password error: ${e.message}")
+            ForgotPasswordResult.Failed(NETWORK_ERROR_MESSAGE)
+        }
+    }
+
+    suspend fun resetPassword(token: String, password: String, fingerprint: String): LoginResponse? {
+        return try {
+            val response = rest.httpClient.post("${rest.apiBase}/auth/reset") {
+                loginHeaders(rest, fingerprint)
+                contentType(ContentType.Application.Json)
+                setBody(buildJsonObject { put("token", token); put("password", password) })
+            }
+            val body = response.bodyAsText()
+            Logging.i("Auth", "Reset password: HTTP ${response.status.value}")
+            if (response.status.isSuccess()) {
+                decodeLogin(body)?.let { completeLogin(it) }
+            } else {
+                val discord = rest.discordError(body)
+                LoginResponse(
+                    message = httpFallbackMessage(
+                        status = response.status.value,
+                        discordMessage = discord?.message?.takeIf { it.isNotBlank() },
+                        fallback = "Could not reset the password (HTTP ${response.status.value})."
+                    )
+                )
+            }
+        } catch (e: CaptchaCancelledException) {
+            LoginResponse(captchaCancelled = true)
+        } catch (e: Exception) {
+            Logging.e("Auth", "Reset password error: ${e.message}")
+            networkFailure()
+        }
     }
 
     suspend fun logoutRemote(token: String) {

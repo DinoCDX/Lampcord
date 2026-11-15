@@ -10,6 +10,7 @@ import kotlinx.coroutines.withContext
 import me.lampu.lampcord.shared.api.AuthApi
 import me.lampu.lampcord.shared.gateway.GatewayManager
 import me.lampu.lampcord.shared.gateway.VoiceGatewayManager
+import me.lampu.lampcord.shared.api.ForgotPasswordResult
 import me.lampu.lampcord.shared.model.LoginRequest
 import me.lampu.lampcord.shared.model.LoginResponse
 import me.lampu.lampcord.shared.model.MFALoginRequest
@@ -181,6 +182,12 @@ class SessionManager(
 
     suspend fun authorizeLoginIp(token: String): Result<Unit> =
         authApi.authorizeIp(token, loginFlowFingerprint())
+
+    suspend fun forgotPassword(login: String): ForgotPasswordResult =
+        authApi.forgotPassword(login, loginFlowFingerprint())
+
+    suspend fun resetPassword(token: String, password: String): LoginResponse? =
+        authApi.resetPassword(token, password, loginFlowFingerprint())
 
     suspend fun verifyMFA(
         code: String,
