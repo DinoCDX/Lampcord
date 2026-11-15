@@ -43,6 +43,12 @@
     <string name="lampcord_login_sms_subtitle">Enter the 6-digit code sent to %1$s.</string>
     <string name="lampcord_login_sms_title">Enter SMS Code</string>
     <string name="lampcord_login_use_sms">Send code by SMS</string>
+    <string name="lampcord_login_verify_code_label">6-digit code</string>
+    <string name="lampcord_login_verify_empty">Enter the code or link you received.</string>
+    <string name="lampcord_login_verify_email_subtitle">Discord sent a verification link to your email. Paste the link or the token from it.</string>
+    <string name="lampcord_login_verify_link_label">Verification link or token</string>
+    <string name="lampcord_login_verify_phone_subtitle">Discord sent a 6-digit code to %1$s. Enter it to continue.</string>
+    <string name="lampcord_login_verify_title">Verify this login</string>
     <string name="lampcord_login_backup_subtitle">Enter one of your backup codes.</string>
     <string name="lampcord_login_mfa_subtitle">Enter the 6-digit code from your authenticator app.</string>
     <string name="lampcord_login_restore_account">Restore account</string>

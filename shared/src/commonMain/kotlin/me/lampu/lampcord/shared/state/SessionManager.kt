@@ -173,6 +173,15 @@ class SessionManager(
     suspend fun sendMfaSms(ticket: String): Result<String> =
         authApi.sendMfaSms(ticket, loginFlowFingerprint())
 
+    suspend fun verifyLoginPhone(phone: String, code: String): Result<String> =
+        authApi.verifyPhoneForLogin(phone, code, loginFlowFingerprint())
+
+    suspend fun resendLoginPhoneCode(phone: String): Result<Unit> =
+        authApi.resendPhoneCode(phone, loginFlowFingerprint())
+
+    suspend fun authorizeLoginIp(token: String): Result<Unit> =
+        authApi.authorizeIp(token, loginFlowFingerprint())
+
     suspend fun verifyMFA(
         code: String,
         ticket: String,

@@ -97,6 +97,12 @@ import me.lampu.lampcord.shared.generated.resources.lampcord_login_token_show
 import me.lampu.lampcord.shared.generated.resources.lampcord_login_use_authenticator
 import me.lampu.lampcord.shared.generated.resources.lampcord_login_use_backup
 import me.lampu.lampcord.shared.generated.resources.lampcord_login_use_sms
+import me.lampu.lampcord.shared.generated.resources.lampcord_login_verify_code_label
+import me.lampu.lampcord.shared.generated.resources.lampcord_login_verify_email_subtitle
+import me.lampu.lampcord.shared.generated.resources.lampcord_login_verify_empty
+import me.lampu.lampcord.shared.generated.resources.lampcord_login_verify_link_label
+import me.lampu.lampcord.shared.generated.resources.lampcord_login_verify_phone_subtitle
+import me.lampu.lampcord.shared.generated.resources.lampcord_login_verify_title
 import me.lampu.lampcord.shared.generated.resources.lampcord_login_with_credentials
 import me.lampu.lampcord.shared.generated.resources.lampcord_login_with_token
 import me.lampu.lampcord.shared.generated.resources.login
@@ -120,6 +126,8 @@ private enum class MfaMethod(val apiType: String) {
     Sms("sms"),
     Backup("backup")
 }
+
+private enum class VerificationMode { Phone, EmailLink }
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -146,6 +154,8 @@ fun LoginScreen(
     var mfaMethod by remember { mutableStateOf(MfaMethod.Totp) }
     var mfaPasskeyOnly by remember { mutableStateOf(false) }
     var mfaPhone by remember { mutableStateOf<String?>(null) }
+    var verificationMode by remember { mutableStateOf<VerificationMode?>(null) }
+    var verificationInput by remember { mutableStateOf("") }
 
     val passwordFocus = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
@@ -157,8 +167,9 @@ fun LoginScreen(
     val invalidMfaError = stringResource(Res.string.lampcord_login_error_invalid_mfa)
     val captchaCancelledError = stringResource(Res.string.lampcord_login_error_captcha_cancelled)
     val unexpectedError = stringResource(Res.string.lampcord_login_error_unexpected)
+    val verificationEmptyError = stringResource(Res.string.lampcord_login_verify_empty)
 
-    val inCredentialsForm = mfaTicket == null && !useTokenLogin
+    val inCredentialsForm = mfaTicket == null && !useTokenLogin && verificationMode == null
     val passwordError = inCredentialsForm && failure == LoginFailure.INVALID_CREDENTIALS
     val canRestoreAccount = inCredentialsForm &&
         (failure == LoginFailure.ACCOUNT_DISABLED || failure == LoginFailure.ACCOUNT_SCHEDULED_FOR_DELETION)
@@ -257,12 +268,50 @@ fun LoginScreen(
             else -> {
                 errorMessage = response.message ?: invalidLoginError
                 failure = response.failure
+                if (response.failure == LoginFailure.VERIFICATION_REQUIRED) {
+                    verificationMode = if (login.contains('@')) VerificationMode.EmailLink else VerificationMode.Phone
+                    verificationInput = ""
+                }
             }
         }
     }
 
+    suspend fun completeVerification() {
+        val mode = verificationMode ?: return
+        val input = verificationInput.trim()
+        if (input.isEmpty()) {
+            errorMessage = verificationEmptyError
+            return
+        }
+        val token = if (mode == VerificationMode.Phone) {
+            val verified = sessionManager.verifyLoginPhone(login.trim(), input)
+            if (verified.isFailure) {
+                errorMessage = verified.exceptionOrNull()?.message ?: unexpectedError
+                verificationInput = ""
+                return
+            }
+            verified.getOrThrow()
+        } else {
+            verificationTokenFrom(input)
+        }
+        val authorized = sessionManager.authorizeLoginIp(token)
+        if (authorized.isFailure) {
+            errorMessage = authorized.exceptionOrNull()?.message ?: unexpectedError
+            return
+        }
+        verificationMode = null
+        verificationInput = ""
+        credentialLogin(undelete = false)
+    }
+
+    suspend fun resendVerificationCode() {
+        sessionManager.resendLoginPhoneCode(login.trim())
+            .onFailure { errorMessage = it.message ?: unexpectedError }
+    }
+
     fun submit(undelete: Boolean = false) = busy {
         when {
+            verificationMode != null -> completeVerification()
             mfaTicket != null -> verifyMfa()
             useTokenLogin -> {
                 val authToken = token.trim()
@@ -283,11 +332,19 @@ fun LoginScreen(
         }
     }
 
-    LaunchedEffect(useTokenLogin, mfaTicket) {
-        if (useTokenLogin || mfaTicket != null) {
-            remoteAuthClient.stop()
-        } else {
+    val qrActive = !useTokenLogin && mfaTicket == null && verificationMode == null
+
+    LaunchedEffect(qrActive) {
+        if (qrActive) {
             remoteAuthClient.start()
+        } else {
+            remoteAuthClient.stop()
+        }
+    }
+
+    LaunchedEffect(verificationInput) {
+        if (verificationMode == VerificationMode.Phone && verificationInput.length == 6 && !isLoading) {
+            submit()
         }
     }
 
@@ -369,6 +426,56 @@ fun LoginScreen(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         when {
+                            verificationMode != null -> {
+                                val mode = verificationMode
+                                Text(
+                                    text = stringResource(Res.string.lampcord_login_verify_title),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = if (mode == VerificationMode.Phone) {
+                                        stringResource(Res.string.lampcord_login_verify_phone_subtitle, login.trim())
+                                    } else {
+                                        stringResource(Res.string.lampcord_login_verify_email_subtitle)
+                                    },
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    textAlign = TextAlign.Center,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                OutlinedTextField(
+                                    value = verificationInput,
+                                    onValueChange = { next ->
+                                        clearError()
+                                        verificationInput = if (mode == VerificationMode.Phone) {
+                                            next.filter { it.isDigit() }.take(6)
+                                        } else {
+                                            next.trim()
+                                        }
+                                    },
+                                    label = {
+                                        Text(
+                                            if (mode == VerificationMode.Phone) {
+                                                stringResource(Res.string.lampcord_login_verify_code_label)
+                                            } else {
+                                                stringResource(Res.string.lampcord_login_verify_link_label)
+                                            }
+                                        )
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    singleLine = true,
+                                    enabled = !isLoading,
+                                    keyboardOptions = KeyboardOptions(
+                                        keyboardType = if (mode == VerificationMode.Phone) KeyboardType.Number else KeyboardType.Text,
+                                        imeAction = ImeAction.Done
+                                    ),
+                                    keyboardActions = KeyboardActions(onDone = { submit() })
+                                )
+                            }
                             mfaTicket != null -> {
                                 if (!mfaPasskeyOnly) {
                                     Text(
@@ -520,7 +627,7 @@ fun LoginScreen(
                                     )
                                 } else {
                                     Text(
-                                        text = if (mfaTicket == null) stringResource(Res.string.login) else stringResource(Res.string.verify),
+                                        text = if (mfaTicket == null && verificationMode == null) stringResource(Res.string.login) else stringResource(Res.string.verify),
                                         style = MaterialTheme.typography.titleMedium
                                     )
                                 }
@@ -570,6 +677,26 @@ fun LoginScreen(
                             ) {
                                 Text(stringResource(Res.string.back_to_login))
                             }
+                        } else if (verificationMode != null) {
+                            if (verificationMode == VerificationMode.Phone) {
+                                TextButton(
+                                    onClick = { busy { resendVerificationCode() } },
+                                    enabled = !isLoading,
+                                    modifier = Modifier.handCursor()
+                                ) {
+                                    Text(stringResource(Res.string.lampcord_login_resend_sms))
+                                }
+                            }
+                            TextButton(
+                                onClick = {
+                                    verificationMode = null
+                                    verificationInput = ""
+                                    clearError()
+                                },
+                                modifier = Modifier.handCursor()
+                            ) {
+                                Text(stringResource(Res.string.back_to_login))
+                            }
                         } else {
                             TextButton(
                                 onClick = {
@@ -587,7 +714,7 @@ fun LoginScreen(
                     }
                 }
 
-                if (mfaTicket == null && !useTokenLogin) {
+                if (qrActive) {
                     Spacer(modifier = Modifier.height(24.dp))
                     QrLoginCard(
                         state = remoteAuthState,
@@ -710,5 +837,15 @@ private fun DrawScope.drawLocalQrCode(qrCode: QRCode) {
                 )
             }
         }
+    }
+}
+
+private fun verificationTokenFrom(input: String): String {
+    val marker = "token="
+    val index = input.indexOf(marker)
+    return if (index >= 0) {
+        input.substring(index + marker.length).substringBefore('&').substringBefore('#').trim()
+    } else {
+        input.trim()
     }
 }
