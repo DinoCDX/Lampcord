@@ -233,35 +233,6 @@ class AuthApi(
         }
     }
 
-    suspend fun resetPassword(token: String, password: String, fingerprint: String): LoginResponse? {
-        return try {
-            val response = rest.httpClient.post("${rest.apiBase}/auth/reset") {
-                loginHeaders(rest, fingerprint)
-                contentType(ContentType.Application.Json)
-                setBody(buildJsonObject { put("token", token); put("password", password) })
-            }
-            val body = response.bodyAsText()
-            Logging.i("Auth", "Reset password: HTTP ${response.status.value}")
-            if (response.status.isSuccess()) {
-                decodeLogin(body)?.let { completeLogin(it) }
-            } else {
-                val discord = rest.discordError(body)
-                LoginResponse(
-                    message = httpFallbackMessage(
-                        status = response.status.value,
-                        discordMessage = discord?.message?.takeIf { it.isNotBlank() },
-                        fallback = "Could not reset the password (HTTP ${response.status.value})."
-                    )
-                )
-            }
-        } catch (e: CaptchaCancelledException) {
-            LoginResponse(captchaCancelled = true)
-        } catch (e: Exception) {
-            Logging.e("Auth", "Reset password error: ${e.message}")
-            networkFailure()
-        }
-    }
-
     suspend fun logoutRemote(token: String) {
         try {
             rest.httpClient.post("${rest.apiBase}/auth/logout") {

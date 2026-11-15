@@ -186,9 +186,6 @@ class SessionManager(
     suspend fun forgotPassword(login: String): ForgotPasswordResult =
         authApi.forgotPassword(login, loginFlowFingerprint())
 
-    suspend fun resetPassword(token: String, password: String): LoginResponse? =
-        authApi.resetPassword(token, password, loginFlowFingerprint())
-
     suspend fun verifyMFA(
         code: String,
         ticket: String,

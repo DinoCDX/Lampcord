@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -56,7 +57,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -64,8 +64,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.semantics.contentType
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -94,7 +92,6 @@ import me.lampu.lampcord.shared.generated.resources.lampcord_login_backup_code_l
 import me.lampu.lampcord.shared.generated.resources.lampcord_login_backup_subtitle
 import me.lampu.lampcord.shared.generated.resources.lampcord_login_backup_title
 import me.lampu.lampcord.shared.generated.resources.lampcord_login_close
-import me.lampu.lampcord.shared.generated.resources.lampcord_login_confirm_password
 import me.lampu.lampcord.shared.generated.resources.lampcord_login_error_captcha_cancelled
 import me.lampu.lampcord.shared.generated.resources.lampcord_login_error_enter_token
 import me.lampu.lampcord.shared.generated.resources.lampcord_login_error_failed
@@ -103,30 +100,22 @@ import me.lampu.lampcord.shared.generated.resources.lampcord_login_error_invalid
 import me.lampu.lampcord.shared.generated.resources.lampcord_login_error_unexpected
 import me.lampu.lampcord.shared.generated.resources.lampcord_login_forgot_empty
 import me.lampu.lampcord.shared.generated.resources.lampcord_login_forgot_password
+import me.lampu.lampcord.shared.generated.resources.lampcord_login_forgot_phone_unsupported
 import me.lampu.lampcord.shared.generated.resources.lampcord_login_forgot_send
+import me.lampu.lampcord.shared.generated.resources.lampcord_login_forgot_sent_subtitle
+import me.lampu.lampcord.shared.generated.resources.lampcord_login_forgot_sent_title
 import me.lampu.lampcord.shared.generated.resources.lampcord_login_forgot_subtitle
 import me.lampu.lampcord.shared.generated.resources.lampcord_login_forgot_title
-import me.lampu.lampcord.shared.generated.resources.lampcord_login_mfa_code_label
 import me.lampu.lampcord.shared.generated.resources.lampcord_login_mfa_subtitle
 import me.lampu.lampcord.shared.generated.resources.lampcord_login_mfa_title
-import me.lampu.lampcord.shared.generated.resources.lampcord_login_new_password
 import me.lampu.lampcord.shared.generated.resources.lampcord_login_other_login_qr
+import me.lampu.lampcord.shared.generated.resources.lampcord_login_other_methods
 import me.lampu.lampcord.shared.generated.resources.lampcord_login_other_options
 import me.lampu.lampcord.shared.generated.resources.lampcord_login_passkey_only
 import me.lampu.lampcord.shared.generated.resources.lampcord_login_password_hide
-import me.lampu.lampcord.shared.generated.resources.lampcord_login_password_length
-import me.lampu.lampcord.shared.generated.resources.lampcord_login_password_mismatch
 import me.lampu.lampcord.shared.generated.resources.lampcord_login_password_show
 import me.lampu.lampcord.shared.generated.resources.lampcord_login_qr_approve
 import me.lampu.lampcord.shared.generated.resources.lampcord_login_qr_prompt
-import me.lampu.lampcord.shared.generated.resources.lampcord_login_reset_button
-import me.lampu.lampcord.shared.generated.resources.lampcord_login_reset_email_info
-import me.lampu.lampcord.shared.generated.resources.lampcord_login_reset_failed
-import me.lampu.lampcord.shared.generated.resources.lampcord_login_reset_mfa
-import me.lampu.lampcord.shared.generated.resources.lampcord_login_reset_phone_info
-import me.lampu.lampcord.shared.generated.resources.lampcord_login_reset_title
-import me.lampu.lampcord.shared.generated.resources.lampcord_login_reset_token_empty
-import me.lampu.lampcord.shared.generated.resources.lampcord_login_reset_token_label
 import me.lampu.lampcord.shared.generated.resources.lampcord_login_resend_sms
 import me.lampu.lampcord.shared.generated.resources.lampcord_login_restore_account
 import me.lampu.lampcord.shared.generated.resources.lampcord_login_sms_subtitle
@@ -139,7 +128,6 @@ import me.lampu.lampcord.shared.generated.resources.lampcord_login_token_show
 import me.lampu.lampcord.shared.generated.resources.lampcord_login_use_authenticator
 import me.lampu.lampcord.shared.generated.resources.lampcord_login_use_backup
 import me.lampu.lampcord.shared.generated.resources.lampcord_login_use_sms
-import me.lampu.lampcord.shared.generated.resources.lampcord_login_verify_code_label
 import me.lampu.lampcord.shared.generated.resources.lampcord_login_verify_email_subtitle
 import me.lampu.lampcord.shared.generated.resources.lampcord_login_verify_empty
 import me.lampu.lampcord.shared.generated.resources.lampcord_login_verify_link_label
@@ -157,8 +145,10 @@ import me.lampu.lampcord.shared.model.LoginResponse
 import me.lampu.lampcord.shared.state.SessionManager
 import me.lampu.lampcord.shared.state.SettingsStore
 import me.lampu.lampcord.shared.ui.components.ContainedLoadingIndicator
+import me.lampu.lampcord.shared.ui.components.OtpInput
 import me.lampu.lampcord.shared.ui.icons.Icons
 import me.lampu.lampcord.shared.ui.kit.handCursor
+import me.lampu.lampcord.shared.utils.getPlatformName
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.koinInject
 import qrcode.QRCode
@@ -173,9 +163,7 @@ private enum class MfaMethod(val apiType: String) {
 
 private enum class VerificationMode { Phone, EmailLink }
 
-private enum class VerificationPurpose { Login, PasswordReset }
-
-private enum class LoginStep { Credentials, Token, Qr, Mfa, Verification, Forgot, Reset }
+private enum class LoginStep { Credentials, Token, Qr, Mfa, Verification, Forgot, ForgotSent }
 
 private const val SMS_LOGIN_ENABLED = false
 
@@ -188,6 +176,10 @@ fun LoginScreen(
     settingsStore: SettingsStore = koinInject(),
     onLoginSuccess: () -> Unit
 ) {
+    val isMobile = remember {
+        getPlatformName().let { it == "android" || it == "ios" }
+    }
+
     var step by remember { mutableStateOf(LoginStep.Credentials) }
     var showOtherOptions by remember { mutableStateOf(false) }
     var showLanguagePicker by remember { mutableStateOf(false) }
@@ -210,15 +202,9 @@ fun LoginScreen(
     var mfaPhone by remember { mutableStateOf<String?>(null) }
 
     var verificationMode by remember { mutableStateOf<VerificationMode?>(null) }
-    var verificationPurpose by remember { mutableStateOf(VerificationPurpose.Login) }
     var verificationTarget by remember { mutableStateOf("") }
     var verificationInput by remember { mutableStateOf("") }
-
     var forgotLogin by remember { mutableStateOf("") }
-    var resetToken by remember { mutableStateOf("") }
-    var resetInfo by remember { mutableStateOf<String?>(null) }
-    var newPassword by remember { mutableStateOf("") }
-    var confirmPassword by remember { mutableStateOf("") }
 
     val passwordFocus = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
@@ -232,13 +218,7 @@ fun LoginScreen(
     val unexpectedError = stringResource(Res.string.lampcord_login_error_unexpected)
     val verificationEmptyError = stringResource(Res.string.lampcord_login_verify_empty)
     val forgotEmptyError = stringResource(Res.string.lampcord_login_forgot_empty)
-    val resetTokenEmptyError = stringResource(Res.string.lampcord_login_reset_token_empty)
-    val passwordLengthError = stringResource(Res.string.lampcord_login_password_length)
-    val passwordMismatchError = stringResource(Res.string.lampcord_login_password_mismatch)
-    val resetMfaError = stringResource(Res.string.lampcord_login_reset_mfa)
-    val resetFailedError = stringResource(Res.string.lampcord_login_reset_failed)
-    val resetEmailInfo = stringResource(Res.string.lampcord_login_reset_email_info)
-    val resetPhoneInfo = stringResource(Res.string.lampcord_login_reset_phone_info)
+    val phoneUnsupportedError = stringResource(Res.string.lampcord_login_forgot_phone_unsupported)
 
     val passwordError = step == LoginStep.Credentials && failure == LoginFailure.INVALID_CREDENTIALS
     val canRestoreAccount = step == LoginStep.Credentials &&
@@ -288,7 +268,7 @@ fun LoginScreen(
     fun leaveVerification() {
         verificationMode = null
         verificationInput = ""
-        openStep(if (verificationPurpose == VerificationPurpose.PasswordReset) LoginStep.Forgot else LoginStep.Credentials)
+        openStep(LoginStep.Credentials)
     }
 
     suspend fun sendSmsCode() {
@@ -354,7 +334,6 @@ fun LoginScreen(
             }
             response.mfa == true && response.ticket != null -> startMfa(response)
             response.failure == LoginFailure.VERIFICATION_REQUIRED -> {
-                verificationPurpose = VerificationPurpose.Login
                 verificationTarget = login.trim()
                 verificationMode = if (login.contains('@')) VerificationMode.EmailLink else VerificationMode.Phone
                 verificationInput = ""
@@ -386,14 +365,6 @@ fun LoginScreen(
         } else {
             verificationTokenFrom(input)
         }
-        if (verificationPurpose == VerificationPurpose.PasswordReset) {
-            resetToken = verifiedToken
-            resetInfo = resetPhoneInfo
-            verificationMode = null
-            verificationInput = ""
-            openStep(LoginStep.Reset)
-            return
-        }
         val authorized = sessionManager.authorizeLoginIp(verifiedToken)
         if (authorized.isFailure) {
             errorMessage = authorized.exceptionOrNull()?.message ?: unexpectedError
@@ -405,11 +376,6 @@ fun LoginScreen(
         credentialLogin(undelete = false)
     }
 
-    suspend fun resendVerificationCode() {
-        sessionManager.resendLoginPhoneCode(verificationTarget)
-            .onFailure { errorMessage = it.message ?: unexpectedError }
-    }
-
     suspend fun submitForgot() {
         val target = forgotLogin.trim()
         if (target.isEmpty()) {
@@ -417,53 +383,21 @@ fun LoginScreen(
             return
         }
         when (val result = sessionManager.forgotPassword(target)) {
-            ForgotPasswordResult.Sent -> {
-                resetToken = ""
-                resetInfo = resetEmailInfo
-                openStep(LoginStep.Reset)
-            }
-            ForgotPasswordResult.PhoneVerificationRequired -> {
-                verificationPurpose = VerificationPurpose.PasswordReset
-                verificationTarget = target
-                verificationMode = VerificationMode.Phone
-                verificationInput = ""
-                openStep(LoginStep.Verification)
-            }
+            ForgotPasswordResult.Sent -> openStep(LoginStep.ForgotSent)
+            ForgotPasswordResult.PhoneVerificationRequired -> errorMessage = phoneUnsupportedError
             is ForgotPasswordResult.Failed -> errorMessage = result.message
         }
     }
 
-    suspend fun submitReset() {
-        val resetValue = verificationTokenFrom(resetToken)
-        if (resetValue.isEmpty()) {
-            errorMessage = resetTokenEmptyError
-            return
-        }
-        if (newPassword.length !in 8..72) {
-            errorMessage = passwordLengthError
-            return
-        }
-        if (newPassword != confirmPassword) {
-            errorMessage = passwordMismatchError
-            return
-        }
-        val response = sessionManager.resetPassword(resetValue, newPassword)
-        when {
-            response?.token != null -> {
-                sessionManager.connect(response.token)
-                onLoginSuccess()
-            }
-            response?.mfa == true -> errorMessage = resetMfaError
-            else -> errorMessage = response?.message ?: resetFailedError
-        }
+    suspend fun resendVerificationCode() {
+        sessionManager.resendLoginPhoneCode(verificationTarget)
+            .onFailure { errorMessage = it.message ?: unexpectedError }
     }
 
     fun submit(undelete: Boolean = false) = busy {
         when (step) {
             LoginStep.Verification -> completeVerification()
             LoginStep.Mfa -> verifyMfa()
-            LoginStep.Forgot -> submitForgot()
-            LoginStep.Reset -> submitReset()
             LoginStep.Credentials -> credentialLogin(undelete)
             LoginStep.Token -> {
                 val authToken = token.trim()
@@ -475,6 +409,8 @@ fun LoginScreen(
                 }
             }
             LoginStep.Qr -> Unit
+            LoginStep.Forgot -> submitForgot()
+            LoginStep.ForgotSent -> Unit
         }
     }
 
@@ -493,7 +429,7 @@ fun LoginScreen(
     }
 
     LaunchedEffect(step) {
-        if (step == LoginStep.Qr) {
+        if (step == LoginStep.Qr || (!isMobile && step == LoginStep.Credentials)) {
             remoteAuthClient.start()
         } else {
             remoteAuthClient.stop()
@@ -519,7 +455,11 @@ fun LoginScreen(
         Box(modifier = Modifier.fillMaxSize()) {
             IconButton(
                 onClick = { showLanguagePicker = true },
-                modifier = Modifier.align(Alignment.TopEnd).padding(12.dp).handCursor()
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .statusBarsPadding()
+                    .padding(12.dp)
+                    .handCursor()
             ) {
                 Icon(
                     imageVector = Icons.Rounded.Language,
@@ -636,7 +576,6 @@ fun LoginScreen(
                                         }
                                     }
                                     ErrorBanner(bannerError)
-                                    Spacer(modifier = Modifier.height(12.dp))
                                     PrimaryButton(
                                         text = stringResource(Res.string.login),
                                         enabled = !isLoading,
@@ -654,29 +593,38 @@ fun LoginScreen(
                                             Text(stringResource(Res.string.lampcord_login_restore_account))
                                         }
                                     }
-                                    OtherOptionsToggle(
-                                        expanded = showOtherOptions,
-                                        onToggle = { showOtherOptions = !showOtherOptions }
-                                    )
-                                    AnimatedVisibility(
-                                        visible = showOtherOptions,
-                                        enter = fadeIn() + expandVertically(),
-                                        exit = fadeOut() + shrinkVertically()
-                                    ) {
-                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                            TextButton(
-                                                onClick = { openStep(LoginStep.Token) },
-                                                modifier = Modifier.handCursor()
-                                            ) {
-                                                Text(stringResource(Res.string.lampcord_login_with_token))
-                                            }
-                                            TextButton(
-                                                onClick = { openStep(LoginStep.Qr) },
-                                                modifier = Modifier.handCursor()
-                                            ) {
-                                                Text(stringResource(Res.string.lampcord_login_other_login_qr))
-                                            }
+                                    if (isMobile) {
+                                        OtherOptionsToggle(
+                                            label = stringResource(Res.string.lampcord_login_other_options),
+                                            onToggle = { showOtherOptions = !showOtherOptions }
+                                        )
+                                        AnimatedVisibility(
+                                            visible = showOtherOptions,
+                                            enter = fadeIn() + expandVertically(),
+                                            exit = fadeOut() + shrinkVertically()
+                                        ) {
+                                            LoginOptionButtons(
+                                                onToken = { openStep(LoginStep.Token) },
+                                                onQr = { openStep(LoginStep.Qr) }
+                                            )
                                         }
+                                    } else {
+                                        LoginOptionButtons(
+                                            onToken = { openStep(LoginStep.Token) },
+                                            onQr = null
+                                        )
+                                        Spacer(modifier = Modifier.height(20.dp))
+                                        Text(
+                                            text = stringResource(Res.string.lampcord_login_qr_prompt),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            textAlign = TextAlign.Center,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Spacer(modifier = Modifier.height(16.dp))
+                                        QrContent(
+                                            state = remoteAuthState,
+                                            onRetry = { scope.launch { remoteAuthClient.start() } }
+                                        )
                                     }
                                 }
 
@@ -714,7 +662,6 @@ fun LoginScreen(
                                         }
                                     )
                                     ErrorBanner(errorMessage)
-                                    Spacer(modifier = Modifier.height(12.dp))
                                     PrimaryButton(
                                         text = stringResource(Res.string.login),
                                         enabled = !isLoading,
@@ -759,42 +706,34 @@ fun LoginScreen(
                                     )
                                     if (!mfaPasskeyOnly) {
                                         Spacer(modifier = Modifier.height(20.dp))
-                                        OutlinedTextField(
-                                            value = mfaCode,
-                                            onValueChange = { next ->
-                                                clearError()
-                                                mfaCode = if (mfaMethod == MfaMethod.Backup) {
-                                                    next.take(32)
-                                                } else {
-                                                    next.filter { it.isDigit() }.take(6)
-                                                }
-                                            },
-                                            label = {
-                                                Text(
-                                                    if (mfaMethod == MfaMethod.Backup) {
-                                                        stringResource(Res.string.lampcord_login_backup_code_label)
-                                                    } else {
-                                                        stringResource(Res.string.lampcord_login_mfa_code_label)
-                                                    }
-                                                )
-                                            },
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .semantics {
-                                                    if (mfaMethod == MfaMethod.Sms) contentType = ContentType.SmsOtpCode
-                                                },
-                                            singleLine = true,
-                                            enabled = !isLoading,
-                                            keyboardOptions = KeyboardOptions(
-                                                keyboardType = if (mfaMethod == MfaMethod.Backup) KeyboardType.Text else KeyboardType.Number,
-                                                imeAction = ImeAction.Done
-                                            ),
-                                            keyboardActions = KeyboardActions(onDone = { submit() })
-                                        )
+                                        if (mfaMethod == MfaMethod.Backup) {
+                                            OutlinedTextField(
+                                                value = mfaCode,
+                                                onValueChange = { clearError(); mfaCode = it.take(32) },
+                                                label = { Text(stringResource(Res.string.lampcord_login_backup_code_label)) },
+                                                modifier = Modifier.fillMaxWidth(),
+                                                singleLine = true,
+                                                enabled = !isLoading,
+                                                isError = errorMessage != null,
+                                                keyboardOptions = KeyboardOptions(
+                                                    keyboardType = KeyboardType.Text,
+                                                    imeAction = ImeAction.Done
+                                                ),
+                                                keyboardActions = KeyboardActions(onDone = { submit() })
+                                            )
+                                        } else {
+                                            OtpInput(
+                                                value = mfaCode,
+                                                onValueChange = { clearError(); mfaCode = it },
+                                                enabled = !isLoading,
+                                                isError = errorMessage != null,
+                                                autoFocus = true,
+                                                keyboardActions = KeyboardActions(onDone = { submit() })
+                                            )
+                                        }
                                     }
                                     ErrorBanner(errorMessage)
                                     if (!mfaPasskeyOnly) {
-                                        Spacer(modifier = Modifier.height(12.dp))
                                         PrimaryButton(
                                             text = stringResource(Res.string.verify),
                                             enabled = !isLoading,
@@ -813,7 +752,7 @@ fun LoginScreen(
                                     }
                                     if (mfaMethods.size > 1) {
                                         OtherOptionsToggle(
-                                            expanded = showOtherOptions,
+                                            label = stringResource(Res.string.lampcord_login_other_methods),
                                             onToggle = { showOtherOptions = !showOtherOptions }
                                         )
                                         AnimatedVisibility(
@@ -846,65 +785,6 @@ fun LoginScreen(
                                     BackButton(text = stringResource(Res.string.back_to_login)) { leaveMfa() }
                                 }
 
-                                LoginStep.Verification -> {
-                                    val mode = verificationMode
-                                    StepHeading(
-                                        title = stringResource(Res.string.lampcord_login_verify_title),
-                                        subtitle = if (mode == VerificationMode.Phone) {
-                                            stringResource(Res.string.lampcord_login_verify_phone_subtitle, verificationTarget)
-                                        } else {
-                                            stringResource(Res.string.lampcord_login_verify_email_subtitle)
-                                        }
-                                    )
-                                    Spacer(modifier = Modifier.height(20.dp))
-                                    OutlinedTextField(
-                                        value = verificationInput,
-                                        onValueChange = { next ->
-                                            clearError()
-                                            verificationInput = if (mode == VerificationMode.Phone) {
-                                                next.filter { it.isDigit() }.take(6)
-                                            } else {
-                                                next.trim()
-                                            }
-                                        },
-                                        label = {
-                                            Text(
-                                                if (mode == VerificationMode.Phone) {
-                                                    stringResource(Res.string.lampcord_login_verify_code_label)
-                                                } else {
-                                                    stringResource(Res.string.lampcord_login_verify_link_label)
-                                                }
-                                            )
-                                        },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        singleLine = true,
-                                        enabled = !isLoading,
-                                        keyboardOptions = KeyboardOptions(
-                                            keyboardType = if (mode == VerificationMode.Phone) KeyboardType.Number else KeyboardType.Text,
-                                            imeAction = ImeAction.Done
-                                        ),
-                                        keyboardActions = KeyboardActions(onDone = { submit() })
-                                    )
-                                    ErrorBanner(errorMessage)
-                                    Spacer(modifier = Modifier.height(12.dp))
-                                    PrimaryButton(
-                                        text = stringResource(Res.string.verify),
-                                        enabled = !isLoading,
-                                        loading = isLoading,
-                                        onClick = { submit() }
-                                    )
-                                    if (mode == VerificationMode.Phone) {
-                                        TextButton(
-                                            onClick = { busy { resendVerificationCode() } },
-                                            enabled = !isLoading,
-                                            modifier = Modifier.handCursor()
-                                        ) {
-                                            Text(stringResource(Res.string.lampcord_login_resend_sms))
-                                        }
-                                    }
-                                    BackButton(text = stringResource(Res.string.back_to_login)) { leaveVerification() }
-                                }
-
                                 LoginStep.Forgot -> {
                                     StepHeading(
                                         title = stringResource(Res.string.lampcord_login_forgot_title),
@@ -926,7 +806,6 @@ fun LoginScreen(
                                         keyboardActions = KeyboardActions(onDone = { submit() })
                                     )
                                     ErrorBanner(errorMessage)
-                                    Spacer(modifier = Modifier.height(12.dp))
                                     PrimaryButton(
                                         text = stringResource(Res.string.lampcord_login_forgot_send),
                                         enabled = !isLoading,
@@ -938,78 +817,71 @@ fun LoginScreen(
                                     }
                                 }
 
-                                LoginStep.Reset -> {
+                                LoginStep.ForgotSent -> {
                                     StepHeading(
-                                        title = stringResource(Res.string.lampcord_login_reset_title),
-                                        subtitle = resetInfo
+                                        title = stringResource(Res.string.lampcord_login_forgot_sent_title),
+                                        subtitle = stringResource(Res.string.lampcord_login_forgot_sent_subtitle)
                                     )
-                                    Spacer(modifier = Modifier.height(20.dp))
-                                    OutlinedTextField(
-                                        value = resetToken,
-                                        onValueChange = { resetToken = it; clearError() },
-                                        label = { Text(stringResource(Res.string.lampcord_login_reset_token_label)) },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        singleLine = true,
-                                        enabled = !isLoading,
-                                        keyboardOptions = KeyboardOptions(
-                                            capitalization = KeyboardCapitalization.None,
-                                            keyboardType = KeyboardType.Text,
-                                            imeAction = ImeAction.Next
-                                        ),
-                                        keyboardActions = KeyboardActions(onNext = { passwordFocus.requestFocus() })
+                                    PrimaryButton(
+                                        text = stringResource(Res.string.back_to_login),
+                                        enabled = true,
+                                        loading = false,
+                                        onClick = { openStep(LoginStep.Credentials) }
                                     )
-                                    Spacer(modifier = Modifier.height(12.dp))
-                                    OutlinedTextField(
-                                        value = newPassword,
-                                        onValueChange = { newPassword = it; clearError() },
-                                        label = { Text(stringResource(Res.string.lampcord_login_new_password)) },
-                                        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                                        modifier = Modifier.fillMaxWidth().focusRequester(passwordFocus),
-                                        singleLine = true,
-                                        enabled = !isLoading,
-                                        keyboardOptions = KeyboardOptions(
-                                            keyboardType = KeyboardType.Password,
-                                            imeAction = ImeAction.Next
-                                        ),
-                                        trailingIcon = {
-                                            IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                                                Icon(
-                                                    imageVector = if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                                    contentDescription = if (passwordVisible) {
-                                                        stringResource(Res.string.lampcord_login_password_hide)
-                                                    } else {
-                                                        stringResource(Res.string.lampcord_login_password_show)
-                                                    }
-                                                )
-                                            }
+                                }
+
+                                LoginStep.Verification -> {
+                                    val mode = verificationMode
+                                    StepHeading(
+                                        title = stringResource(Res.string.lampcord_login_verify_title),
+                                        subtitle = if (mode == VerificationMode.Phone) {
+                                            stringResource(Res.string.lampcord_login_verify_phone_subtitle, verificationTarget)
+                                        } else {
+                                            stringResource(Res.string.lampcord_login_verify_email_subtitle)
                                         }
                                     )
-                                    Spacer(modifier = Modifier.height(12.dp))
-                                    OutlinedTextField(
-                                        value = confirmPassword,
-                                        onValueChange = { confirmPassword = it; clearError() },
-                                        label = { Text(stringResource(Res.string.lampcord_login_confirm_password)) },
-                                        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                                        modifier = Modifier.fillMaxWidth(),
-                                        singleLine = true,
-                                        enabled = !isLoading,
-                                        keyboardOptions = KeyboardOptions(
-                                            keyboardType = KeyboardType.Password,
-                                            imeAction = ImeAction.Done
-                                        ),
-                                        keyboardActions = KeyboardActions(onDone = { submit() })
-                                    )
+                                    Spacer(modifier = Modifier.height(20.dp))
+                                    if (mode == VerificationMode.Phone) {
+                                        OtpInput(
+                                            value = verificationInput,
+                                            onValueChange = { clearError(); verificationInput = it },
+                                            enabled = !isLoading,
+                                            isError = errorMessage != null,
+                                            autoFocus = true,
+                                            keyboardActions = KeyboardActions(onDone = { submit() })
+                                        )
+                                    } else {
+                                        OutlinedTextField(
+                                            value = verificationInput,
+                                            onValueChange = { clearError(); verificationInput = it.trim() },
+                                            label = { Text(stringResource(Res.string.lampcord_login_verify_link_label)) },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            singleLine = true,
+                                            enabled = !isLoading,
+                                            keyboardOptions = KeyboardOptions(
+                                                keyboardType = KeyboardType.Text,
+                                                imeAction = ImeAction.Done
+                                            ),
+                                            keyboardActions = KeyboardActions(onDone = { submit() })
+                                        )
+                                    }
                                     ErrorBanner(errorMessage)
-                                    Spacer(modifier = Modifier.height(12.dp))
                                     PrimaryButton(
-                                        text = stringResource(Res.string.lampcord_login_reset_button),
+                                        text = stringResource(Res.string.verify),
                                         enabled = !isLoading,
                                         loading = isLoading,
                                         onClick = { submit() }
                                     )
-                                    BackButton(text = stringResource(Res.string.back_to_login)) {
-                                        openStep(LoginStep.Forgot)
+                                    if (mode == VerificationMode.Phone) {
+                                        TextButton(
+                                            onClick = { busy { resendVerificationCode() } },
+                                            enabled = !isLoading,
+                                            modifier = Modifier.handCursor()
+                                        ) {
+                                            Text(stringResource(Res.string.lampcord_login_resend_sms))
+                                        }
                                     }
+                                    BackButton(text = stringResource(Res.string.back_to_login)) { leaveVerification() }
                                 }
                             }
                         }
@@ -1082,6 +954,20 @@ private fun StepHeading(title: String, subtitle: String?) {
 }
 
 @Composable
+private fun LoginOptionButtons(onToken: () -> Unit, onQr: (() -> Unit)?) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        TextButton(onClick = onToken, modifier = Modifier.handCursor()) {
+            Text(stringResource(Res.string.lampcord_login_with_token))
+        }
+        if (onQr != null) {
+            TextButton(onClick = onQr, modifier = Modifier.handCursor()) {
+                Text(stringResource(Res.string.lampcord_login_other_login_qr))
+            }
+        }
+    }
+}
+
+@Composable
 private fun ErrorBanner(message: String?) {
     if (message != null) {
         Spacer(modifier = Modifier.height(12.dp))
@@ -1124,10 +1010,10 @@ private fun BackButton(text: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun OtherOptionsToggle(expanded: Boolean, onToggle: () -> Unit) {
+private fun OtherOptionsToggle(label: String, onToggle: () -> Unit) {
     Spacer(modifier = Modifier.height(4.dp))
     TextButton(onClick = onToggle, modifier = Modifier.handCursor()) {
-        Text(stringResource(Res.string.lampcord_login_other_options))
+        Text(label)
     }
 }
 

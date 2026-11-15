@@ -69,6 +69,10 @@
     <string name="lampcord_login_reset_title">Choose a new password</string>
     <string name="lampcord_login_reset_token_empty">Paste the reset link or token.</string>
     <string name="lampcord_login_reset_token_label">Reset link or token</string>
+    <string name="lampcord_login_other_methods">Other options</string>
+    <string name="lampcord_login_forgot_sent_subtitle">Check your email to continue with password reset. Set your new password from the link, then log in here.</string>
+    <string name="lampcord_login_forgot_sent_title">Check your email</string>
+    <string name="lampcord_login_forgot_phone_unsupported">Password reset by phone number isn't supported in Lampcord yet. Use the email on your account, or reset on discord.com.</string>
     <string name="lampcord_login_backup_subtitle">Enter one of your backup codes.</string>
     <string name="lampcord_login_mfa_subtitle">Enter the 6-digit code from your authenticator app.</string>
     <string name="lampcord_login_restore_account">Restore account</string>
