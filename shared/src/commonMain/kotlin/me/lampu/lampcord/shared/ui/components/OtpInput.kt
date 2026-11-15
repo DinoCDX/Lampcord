@@ -4,7 +4,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -29,7 +30,7 @@ import androidx.compose.ui.unit.dp
 fun OtpInput(
     value: String,
     onValueChange: (String) -> Unit,
-    modifier: Modifier = Modifier,
+    modifier: Modifier = Modifier.fillMaxWidth(),
     length: Int = 6,
     enabled: Boolean = true,
     isError: Boolean = false,
@@ -54,14 +55,18 @@ fun OtpInput(
         ),
         keyboardActions = keyboardActions,
         decorationBox = { innerTextField ->
-            Box(contentAlignment = Alignment.Center) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     repeat(length) { index ->
                         val digit = value.getOrNull(index)?.toString().orEmpty()
                         val isCurrent = enabled && index == value.length
                         Box(
                             modifier = Modifier
-                                .size(width = 44.dp, height = 56.dp)
+                                .weight(1f)
+                                .height(56.dp)
                                 .border(
                                     width = if (isCurrent) 2.dp else 1.dp,
                                     color = when {

@@ -13,6 +13,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -61,6 +62,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -146,6 +152,7 @@ import me.lampu.lampcord.shared.state.SessionManager
 import me.lampu.lampcord.shared.state.SettingsStore
 import me.lampu.lampcord.shared.ui.components.ContainedLoadingIndicator
 import me.lampu.lampcord.shared.ui.components.OtpInput
+import me.lampu.lampcord.shared.ui.components.PlatformBackHandler
 import me.lampu.lampcord.shared.ui.icons.Icons
 import me.lampu.lampcord.shared.ui.kit.handCursor
 import me.lampu.lampcord.shared.utils.getPlatformName
@@ -224,6 +231,13 @@ fun LoginScreen(
     val canRestoreAccount = step == LoginStep.Credentials &&
         (failure == LoginFailure.ACCOUNT_DISABLED || failure == LoginFailure.ACCOUNT_SCHEDULED_FOR_DELETION)
     val bannerError = if (passwordError) null else errorMessage
+
+    val backAction: (() -> Unit)? = when (step) {
+        LoginStep.Credentials -> null
+        LoginStep.Mfa -> ({ leaveMfa() })
+        LoginStep.Verification -> ({ leaveVerification() })
+        else -> ({ openStep(LoginStep.Credentials) })
+    }
 
     fun clearError() {
         errorMessage = null
@@ -448,8 +462,21 @@ fun LoginScreen(
         }
     }
 
+    PlatformBackHandler(enabled = backAction != null) { backAction?.invoke() }
+
     Surface(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier
+            .fillMaxSize()
+            .focusable()
+            .onPreviewKeyEvent { event ->
+                val back = backAction
+                if (back != null && event.type == KeyEventType.KeyDown && event.key == Key.Escape) {
+                    back()
+                    true
+                } else {
+                    false
+                }
+            },
         color = MaterialTheme.colorScheme.background
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
@@ -465,6 +492,22 @@ fun LoginScreen(
                     imageVector = Icons.Rounded.Language,
                     contentDescription = stringResource(Res.string.language)
                 )
+            }
+
+            backAction?.let { onBack ->
+                IconButton(
+                    onClick = onBack,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .statusBarsPadding()
+                        .padding(12.dp)
+                        .handCursor()
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.ArrowBack,
+                        contentDescription = stringResource(Res.string.back_to_login)
+                    )
+                }
             }
 
             Column(
@@ -668,9 +711,6 @@ fun LoginScreen(
                                         loading = isLoading,
                                         onClick = { submit() }
                                     )
-                                    BackButton(text = stringResource(Res.string.back_to_login)) {
-                                        openStep(LoginStep.Credentials)
-                                    }
                                 }
 
                                 LoginStep.Qr -> {
@@ -683,9 +723,6 @@ fun LoginScreen(
                                         state = remoteAuthState,
                                         onRetry = { scope.launch { remoteAuthClient.start() } }
                                     )
-                                    BackButton(text = stringResource(Res.string.back_to_login)) {
-                                        openStep(LoginStep.Credentials)
-                                    }
                                 }
 
                                 LoginStep.Mfa -> {
@@ -782,7 +819,6 @@ fun LoginScreen(
                                             }
                                         }
                                     }
-                                    BackButton(text = stringResource(Res.string.back_to_login)) { leaveMfa() }
                                 }
 
                                 LoginStep.Forgot -> {
@@ -812,21 +848,12 @@ fun LoginScreen(
                                         loading = isLoading,
                                         onClick = { submit() }
                                     )
-                                    BackButton(text = stringResource(Res.string.back_to_login)) {
-                                        openStep(LoginStep.Credentials)
-                                    }
                                 }
 
                                 LoginStep.ForgotSent -> {
                                     StepHeading(
                                         title = stringResource(Res.string.lampcord_login_forgot_sent_title),
                                         subtitle = stringResource(Res.string.lampcord_login_forgot_sent_subtitle)
-                                    )
-                                    PrimaryButton(
-                                        text = stringResource(Res.string.back_to_login),
-                                        enabled = true,
-                                        loading = false,
-                                        onClick = { openStep(LoginStep.Credentials) }
                                     )
                                 }
 
@@ -881,7 +908,6 @@ fun LoginScreen(
                                             Text(stringResource(Res.string.lampcord_login_resend_sms))
                                         }
                                     }
-                                    BackButton(text = stringResource(Res.string.back_to_login)) { leaveVerification() }
                                 }
                             }
                         }
@@ -999,13 +1025,6 @@ private fun PrimaryButton(text: String, enabled: Boolean, loading: Boolean, onCl
         } else {
             Text(text = text, style = MaterialTheme.typography.titleMedium)
         }
-    }
-}
-
-@Composable
-private fun BackButton(text: String, onClick: () -> Unit) {
-    TextButton(onClick = onClick, modifier = Modifier.handCursor()) {
-        Text(text)
     }
 }
 
