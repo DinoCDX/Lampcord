@@ -80,18 +80,19 @@ class RestClient(
             put("device", getDeviceName())
             put("system_locale", "en-US")
             put("has_client_mods", false)
-            put("client_version", if (isMobile) "341.0 - rn" else "0.0.398")
-            put("release_channel", if (isMobile) "canaryRelease" else "stable")
+            put("client_version", if (isMobile) "353.11 - rn" else "0.0.398")
+            put("release_channel", if (isMobile) "googleRelease" else "stable")
             put("device_vendor_id", vendorId)
             put("design_id", 2)
             put("browser_user_agent", if (isMobile) {
-                if (platform == "android") "Discord-Android/341200;RNA" else "Discord/105180 CFNetwork/1410.0.3 Darwin/22.4.0"
+                if (platform == "android") "" else "Discord/105180 CFNetwork/1410.0.3 Darwin/22.4.0"
             } else "")
             put("browser_version", if (isMobile) "" else "37.6.0")
             put("os_version", getOsVersion())
-            put("client_build_number", if (isMobile) 6081 else 575562)
+            put("client_build_number", if (isMobile) 35301100000000L else 575562)
             put("client_event_source", JsonNull)
             if (isMobile) {
+                if (platform == "android") put("install_source", "com.android.vending")
                 put("client_launch_id", launchId)
                 put("launch_signature", launchSignature)
                 put("client_app_state", "active")
@@ -120,7 +121,7 @@ fun HttpRequestBuilder.standardHeaders(rest: RestClient) {
 
     val userAgent = if (isMobile) {
         if (platform == "android") {
-            "Discord-Android/341200;RNA"
+            "Discord-Android/353011;RNA"
         } else {
             "Discord/105180 CFNetwork/1410.0.3 Darwin/22.4.0"
         }
@@ -139,7 +140,7 @@ fun HttpRequestBuilder.loginHeaders(rest: RestClient, fingerprint: String? = nul
     val platform = getPlatformName()
     val isMobile = platform == "android" || platform == "ios"
     val userAgent = if (isMobile) {
-        if (platform == "android") "Discord-Android/341200;RNA" else "Discord/105180 CFNetwork/1410.0.3 Darwin/22.4.0"
+        if (platform == "android") "Discord-Android/353011;RNA" else "Discord/105180 CFNetwork/1410.0.3 Darwin/22.4.0"
     } else {
         "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) discord/0.0.398 Chrome/138.0.7204.251 Electron/37.6.0 Safari/537.36"
     }
