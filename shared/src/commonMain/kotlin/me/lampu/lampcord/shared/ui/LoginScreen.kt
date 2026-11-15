@@ -232,12 +232,6 @@ fun LoginScreen(
         (failure == LoginFailure.ACCOUNT_DISABLED || failure == LoginFailure.ACCOUNT_SCHEDULED_FOR_DELETION)
     val bannerError = if (passwordError) null else errorMessage
 
-    val backAction: (() -> Unit)? = when (step) {
-        LoginStep.Credentials -> null
-        LoginStep.Mfa -> ({ leaveMfa() })
-        LoginStep.Verification -> ({ leaveVerification() })
-        else -> ({ openStep(LoginStep.Credentials) })
-    }
 
     fun clearError() {
         errorMessage = null
@@ -460,6 +454,13 @@ fun LoginScreen(
             sessionManager.connect(state.token)
             onLoginSuccess()
         }
+    }
+
+    val backAction: (() -> Unit)? = when (step) {
+        LoginStep.Credentials -> null
+        LoginStep.Mfa -> ({ leaveMfa() })
+        LoginStep.Verification -> ({ leaveVerification() })
+        else -> ({ openStep(LoginStep.Credentials) })
     }
 
     PlatformBackHandler(enabled = backAction != null) { backAction?.invoke() }
