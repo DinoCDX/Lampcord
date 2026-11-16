@@ -22,10 +22,10 @@ import androidx.compose.ui.unit.sp
 import me.lampu.lampcord.shared.api.CdnUrls
 import me.lampu.lampcord.shared.api.UserApi
 import me.lampu.lampcord.shared.model.User
+import me.lampu.lampcord.shared.model.UserSettings
 import me.lampu.lampcord.shared.state.*
 import me.lampu.lampcord.shared.ui.icons.Icons
 import org.koin.compose.koinInject
-import kotlinx.coroutines.launch
 import me.lampu.lampcord.shared.ui.kit.clickableCursor
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -43,7 +43,6 @@ fun UserStatusBottomSheet(
 ) {
     val currentUser by userStore.currentUser.collectAsState()
     val accounts = tokenStore.getAccounts()
-    val scope = rememberCoroutineScope()
     
     var showAccountSwitcher by remember { mutableStateOf(false) }
 
@@ -121,7 +120,7 @@ fun UserStatusBottomSheet(
                     icon = { StatusIndicator(status = "online", size = 20.dp, borderWidth = 0.dp) },
                     label = "Online",
                     onClick = {
-                        scope.launch { presenceStore.updateStatus("online") }
+                        settingsStore.updateUserSettings(UserSettings.Partial(status = "online"))
                         onDismiss()
                     }
                 )
@@ -129,7 +128,7 @@ fun UserStatusBottomSheet(
                     icon = { StatusIndicator(status = "idle", size = 20.dp, borderWidth = 0.dp) },
                     label = "Idle",
                     onClick = {
-                        scope.launch { presenceStore.updateStatus("idle") }
+                        settingsStore.updateUserSettings(UserSettings.Partial(status = "idle"))
                         onDismiss()
                     }
                 )
@@ -137,7 +136,7 @@ fun UserStatusBottomSheet(
                     icon = { StatusIndicator(status = "dnd", size = 20.dp, borderWidth = 0.dp) },
                     label = "Do Not Disturb",
                     onClick = {
-                        scope.launch { presenceStore.updateStatus("dnd") }
+                        settingsStore.updateUserSettings(UserSettings.Partial(status = "dnd"))
                         onDismiss()
                     }
                 )
@@ -145,7 +144,7 @@ fun UserStatusBottomSheet(
                     icon = { StatusIndicator(status = "invisible", size = 20.dp, borderWidth = 0.dp) },
                     label = "Invisible",
                     onClick = {
-                        scope.launch { presenceStore.updateStatus("invisible") }
+                        settingsStore.updateUserSettings(UserSettings.Partial(status = "invisible"))
                         onDismiss()
                     }
                 )
@@ -239,7 +238,7 @@ fun UserStatusBottomSheet(
 }
 
 @Composable
-internal fun AccountSwitcherItem(
+fun AccountSwitcherItem(
     account: SavedAccount,
     isSelected: Boolean,
     onClick: () -> Unit
