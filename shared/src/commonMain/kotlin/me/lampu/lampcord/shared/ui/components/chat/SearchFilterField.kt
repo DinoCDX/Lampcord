@@ -574,7 +574,7 @@ fun SearchFilterActions(state: SearchInputState) {
 @Composable
 fun SearchSuggestionList(suggestions: List<SearchSuggestion>, modifier: Modifier = Modifier) {
     LazyColumn(modifier = modifier.fillMaxWidth()) {
-        items(suggestions) { suggestion ->
+        itemsIndexed(suggestions, key = { index, suggestion -> "$index|${suggestion.title}" }) { _, suggestion ->
             Row(
                 modifier = Modifier
                     .fillMaxWidth()

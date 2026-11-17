@@ -133,7 +133,7 @@ fun DebugLogScreen(onBack: () -> Unit) {
                         label = { Text(stringResource(Res.string.lampcord_settings_all)) }
                     )
                 }
-                items(levels) { level ->
+                items(levels, key = { it }) { level ->
                     FilterChip(
                         selected = filterLevel == level,
                         onClick = { filterLevel = if (filterLevel == level) null else level },
@@ -165,7 +165,7 @@ fun DebugLogScreen(onBack: () -> Unit) {
                             label = { Text(stringResource(Res.string.lampcord_settings_all_tags)) }
                         )
                     }
-                    items(tags) { tag ->
+                    items(tags, key = { it }) { tag ->
                         FilterChip(
                             selected = filterTag == tag,
                             onClick = { filterTag = if (filterTag == tag) null else tag },
@@ -184,7 +184,7 @@ fun DebugLogScreen(onBack: () -> Unit) {
                 state = listState,
                 contentPadding = PaddingValues(8.dp)
             ) {
-                items(filteredLogs) { entry ->
+                itemsIndexed(filteredLogs, key = { index, entry -> "$index|${entry.timestamp}" }) { _, entry ->
                     LogEntryItem(entry)
                 }
             }
