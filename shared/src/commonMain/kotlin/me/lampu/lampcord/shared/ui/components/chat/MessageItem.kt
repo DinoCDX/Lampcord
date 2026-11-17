@@ -349,7 +349,9 @@ fun MessageItem(
                             } ?: return@awaitEachGesture
 
                             var lastX = dragStart.position.x
-                            offsetX.snapTo((offsetX.value + lastX - down.position.x).coerceIn(-swipeMaxPx, 0f))
+                            scope.launch {
+                                offsetX.snapTo((offsetX.value + lastX - down.position.x).coerceIn(-swipeMaxPx, 0f))
+                            }
                             while (true) {
                                 val event = awaitPointerEvent()
                                 val change = event.changes.firstOrNull { it.id == down.id } ?: break
@@ -357,7 +359,9 @@ fun MessageItem(
                                 val dx = change.position.x - lastX
                                 lastX = change.position.x
                                 if (dx != 0f) {
-                                    offsetX.snapTo((offsetX.value + dx).coerceIn(-swipeMaxPx, 0f))
+                                    scope.launch {
+                                        offsetX.snapTo((offsetX.value + dx).coerceIn(-swipeMaxPx, 0f))
+                                    }
                                 }
                                 change.consume()
                             }
