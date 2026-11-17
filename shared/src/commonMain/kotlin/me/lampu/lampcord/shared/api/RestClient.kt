@@ -69,9 +69,9 @@ class RestClient(
         this.token = token
     }
 
-    private val superProperties: String by lazy { buildSuperProperties() }
+    private val cachedSuperProperties: String by lazy { buildSuperProperties() }
 
-    fun getSuperProperties(): String = superProperties
+    fun getSuperProperties(): String = cachedSuperProperties
 
     @OptIn(ExperimentalEncodingApi::class)
     private fun buildSuperProperties(): String {
