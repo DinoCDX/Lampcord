@@ -1172,6 +1172,13 @@ fun MobileBaseplate(
             }
         }
 
+        PlatformBackHandler(
+            enabled = currentRoute == Screen.Settings &&
+                (navigationState.backStacks[Screen.Settings]?.size ?: 0) > 1
+        ) {
+            navigator.goBack()
+        }
+
         PlatformBackHandler(enabled = navigationStore.isNotificationsSettingsVisible) {
             navigationStore.isNotificationsSettingsVisible = false
         }
