@@ -444,6 +444,7 @@ fun MobileBaseplate(
                 val currentBottomPadding = (navBarHeight * navBarVisibleAmount).coerceAtLeast(0.dp)
                 Box(Modifier.fillMaxSize().padding(bottom = currentBottomPadding)) {
                     SettingsScreen(
+                        subPageOpen = (navigationState.backStacks[Screen.Settings]?.size ?: 0) > 1,
                         onNavigateToAccount = { navigator.navigate(Screen.AccountSettings) },
                         onNavigateToProfiles = { navigator.navigate(Screen.ProfilesSettings) },
                         onNavigateToPrivacy = { navigator.navigate(Screen.PrivacySettings) },
