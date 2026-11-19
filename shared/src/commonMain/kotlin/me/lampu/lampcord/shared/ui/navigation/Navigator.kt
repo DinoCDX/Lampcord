@@ -8,11 +8,24 @@ import androidx.navigation3.runtime.NavKey
 class Navigator(
     val state: NavigationState,
 ) {
+    val canGoBack: Boolean
+        get() {
+            val stack = state.backStacks[state.topLevelRoute] ?: return false
+            return stack.isNotEmpty() &&
+                (stack.lastOrNull() != state.topLevelRoute || state.topLevelRoute != state.startRoute)
+        }
+
+    val canGoBackInStack: Boolean
+        get() {
+            val stack = state.backStacks[state.topLevelRoute] ?: return false
+            return stack.lastOrNull() != state.topLevelRoute
+        }
+
     fun navigate(route: NavKey) {
         val topLevelKey = state.backStacks.keys.find { it::class == route::class }
         if (topLevelKey != null) {
-            val stack = state.backStacks.getValue(topLevelKey)
-            if (state.topLevelRoute::class == route::class || route == Screen.Settings) {
+            if (state.topLevelRoute::class == route::class) {
+                val stack = state.backStacks.getValue(topLevelKey)
                 while (stack.size > 1) stack.removeLastOrNull()
             }
             state.topLevelRoute = topLevelKey

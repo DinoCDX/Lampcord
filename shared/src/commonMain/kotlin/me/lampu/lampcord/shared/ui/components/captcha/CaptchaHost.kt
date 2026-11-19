@@ -59,6 +59,7 @@ import me.lampu.lampcord.shared.generated.resources.lampcord_captcha_description
 import me.lampu.lampcord.shared.generated.resources.lampcord_captcha_title
 import me.lampu.lampcord.shared.generated.resources.lampcord_captcha_webview_missing
 import me.lampu.lampcord.shared.utils.Logging
+import me.lampu.lampcord.shared.utils.configureCaptchaWebView
 import me.lampu.lampcord.shared.utils.isEmbeddedWebViewAvailable
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.koinInject
@@ -67,6 +68,8 @@ internal const val CAPTCHA_TITLE_PREFIX = "LAMPCORD_CAPTCHA:"
 internal const val CAPTCHA_READY_TITLE = "LAMPCORD_READY"
 internal const val CAPTCHA_EVENT_PREFIX = "LAMPCORD_EVENT:"
 private const val CAPTCHA_PAGE_URL = "https://discord.com/login"
+private const val CAPTCHA_USER_AGENT =
+    "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36"
 
 private const val HIDDEN_CARD_ALPHA = 0.02f
 private const val HIDDEN_CARD_OFFSET_PX = 20_000
@@ -206,7 +209,13 @@ private fun CaptchaFrame(
 ) {
     val colors = MaterialTheme.colorScheme
     val navigator = rememberWebViewNavigator()
-    val webViewState = rememberWebViewState(CAPTCHA_PAGE_URL)
+    val webViewState = rememberWebViewState(CAPTCHA_PAGE_URL) {
+        customUserAgentString = CAPTCHA_USER_AGENT
+        androidWebSettings.apply {
+            useWideViewPort = true
+            domStorageEnabled = true
+        }
+    }
 
     val isDark = background.luminance() < 0.5f
     val script = remember(challenge, background) {
@@ -217,21 +226,18 @@ private fun CaptchaFrame(
         )
     }
 
-    var injected by remember(script) { mutableStateOf(false) }
     var widgetReady by remember(script) { mutableStateOf(false) }
     var lastEvent by remember { mutableStateOf<String?>(null) }
     val pageLoaded = webViewState.loadingState is LoadingState.Finished
 
     LaunchedEffect(webViewState) {
         webViewState.webSettings.isJavaScriptEnabled = true
-        navigator.loadUrl(CAPTCHA_PAGE_URL, emptyMap())
     }
 
     LaunchedEffect(pageLoaded, script) {
         if (pageLoaded) {
             delay(PAGE_SETTLE_MS)
             navigator.evaluateJavaScript(script)
-            injected = true
         }
     }
 
@@ -280,6 +286,7 @@ private fun CaptchaFrame(
             state = webViewState,
             navigator = navigator,
             modifier = Modifier.fillMaxSize(),
+            onCreated = { native -> configureCaptchaWebView(native) },
         )
         if (!widgetReady) {
             ContainedLoadingIndicator(indicatorColor = colors.primary)
@@ -369,6 +376,11 @@ internal fun captchaInjectionScript(
     doc.title = status;
   }
   function report(message) { setStatus($eventPrefix + message); }
+  function errorText(e) {
+    if (!e) { return 'null'; }
+    if (typeof e === 'string') { return e; }
+    try { return JSON.stringify(e); } catch (_) { return String(e); }
+  }
 
   window.lampcordDone = function (token) {
     solved = true;
@@ -429,31 +441,50 @@ private const val HCAPTCHA_SERVICE_JS = """
       callback: window.lampcordDone,
       'open-callback': function () { report('open'); },
       'close-callback': function () { report('close'); },
-      'error-callback': function (code) { report('error:' + code); },
+      'error-callback': function (code) { report('error:' + errorText(code)); },
       'expired-callback': function () { report('expired'); },
       'chalexpired-callback': function () { report('challenge-expired'); }
     };
     if (INVISIBLE) { opts.size = 'invisible'; }
-    if (RQDATA) { opts.rqdata = RQDATA; }
     try {
       widgetId = hcaptcha.render(box, opts);
-      setStatus(READY);
     } catch (e) {
-      report('render-exception:' + e);
+      report('render-exception:' + errorText(e));
+      return;
     }
+    if (RQDATA && widgetId !== null) {
+      try { hcaptcha.setData(widgetId, { rqdata: RQDATA }); }
+      catch (e) { report('set-data-error:' + errorText(e)); }
+    }
+    setStatus(READY);
+  }
+
+  function fallbackToVisible() {
+    if (!INVISIBLE) { return; }
+    INVISIBLE = false;
+    executed = true;
+    rendered = false;
+    widgetId = null;
+    try { box.innerHTML = ''; } catch (_) {}
+    serviceRender();
+    report('execute-fallback-visible');
   }
 
   function serviceExecute() {
-    if (!(INVISIBLE || RQDATA) || widgetId === null || executed || executeTries >= 5) { return; }
+    if (!INVISIBLE || widgetId === null || executed || executeTries >= 5) { return; }
     executeTries++;
     try {
-      var pending = RQDATA ? hcaptcha.execute(widgetId, { rqdata: RQDATA }) : hcaptcha.execute(widgetId);
+      var pending = hcaptcha.execute(widgetId);
       executed = true;
       if (pending && typeof pending.catch === 'function') {
-        pending.catch(function (e) { report('execute-error:' + e); });
+        pending.catch(function (e) {
+          report('execute-error:' + errorText(e));
+          fallbackToVisible();
+        });
       }
     } catch (e) {
-      report('execute-failed:' + executeTries + ':' + e);
+      report('execute-failed:' + executeTries + ':' + errorText(e));
+      fallbackToVisible();
     }
   }
 """
