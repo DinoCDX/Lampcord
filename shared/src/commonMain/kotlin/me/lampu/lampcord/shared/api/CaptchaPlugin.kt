@@ -27,9 +27,19 @@ val LampcordCaptchaPlugin = createClientPlugin("LampcordCaptcha", ::CaptchaPlugi
         var attempts = 0
         while (call.response.status == HttpStatusCode.BadRequest) {
             call = call.save()
-            val challenge = parseCaptchaChallenge(call.response.bodyAsText()) ?: break
-            if (attempts >= MAX_CAPTCHA_ATTEMPTS) break
-            if (builder.body is OutgoingContent.ReadChannelContent) break
+            val challenge = parseCaptchaChallenge(call.response.bodyAsText())
+            if (challenge == null) {
+                Logging.w("Captcha", "400 response without a usable captcha challenge; not retrying")
+                break
+            }
+            if (attempts >= MAX_CAPTCHA_ATTEMPTS) {
+                Logging.w("Captcha", "Still rejected after $MAX_CAPTCHA_ATTEMPTS captcha attempts; giving up")
+                break
+            }
+            if (builder.body is OutgoingContent.ReadChannelContent) {
+                Logging.w("Captcha", "Request body is a stream and cannot be resent; not retrying after captcha")
+                break
+            }
             attempts++
             Logging.i("Captcha", "Solving ${challenge.service.wireName} challenge, attempt $attempts")
             val token = coordinator.solve(challenge) ?: throw CaptchaCancelledException()
