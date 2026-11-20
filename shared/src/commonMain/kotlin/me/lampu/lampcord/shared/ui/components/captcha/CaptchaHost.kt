@@ -586,7 +586,7 @@ private const val HCAPTCHA_SERVICE_JS = """
     rendered = true;
     renderTries++;
     var container = renderTries % 2 === 1 ? box : 'lampcord-captcha-box';
-    send('rendering', 'sitekey_len=' + String(SITEKEY).length + ' invisible=' + INVISIBLE + ' box_connected=' + box.isConnected + ' container=' + (container === box ? 'element' : 'id') + ' attempt=' + renderTries + ' id_lookup_ok=' + (doc.getElementById('lampcord-captcha-box') === box) + ' same_doc=' + (box.ownerDocument === doc) + ' in_root=' + doc.documentElement.contains(box));
+    send('rendering', 'sitekey_len=' + String(SITEKEY).length + ' invisible=' + INVISIBLE + ' box_connected=' + box.isConnected + ' container=' + (container === box ? 'element' : 'id') + ' attempt=' + renderTries + ' id_lookup_ok=' + (doc.getElementById('lampcord-captcha-box') === box) + ' same_doc=' + (box.ownerDocument === doc) + ' in_root=' + doc.documentElement.contains(box) + ' instanceof_ok=' + (typeof HTMLElement === 'function' ? (box instanceof HTMLElement) : 'n/a') + ' view_ok=' + (box.ownerDocument ? box.ownerDocument.defaultView === window : 'n/a'));
     var opts = {
       sitekey: SITEKEY,
       theme: THEME,
