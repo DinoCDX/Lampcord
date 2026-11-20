@@ -48,11 +48,9 @@ import dev.nucleusframework.webview.jsbridge.rememberWebViewJsBridge
 import dev.nucleusframework.webview.web.WebView
 import dev.nucleusframework.webview.web.WebViewNavigator
 import dev.nucleusframework.webview.web.rememberWebViewNavigator
-import dev.nucleusframework.webview.web.LoadingState
-import dev.nucleusframework.webview.web.rememberWebViewState
+import dev.nucleusframework.webview.web.rememberWebViewStateWithHTMLData
 import io.ktor.http.encodeURLParameter
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.delay
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
@@ -83,28 +81,16 @@ internal const val CAPTCHA_BRIDGE_METHOD = "lampcord.captcha"
 
 private const val CAPTCHA_CHROME_VERSION = "131.0.0.0"
 private const val HIDDEN_CARD_ALPHA = 0.02f
-private const val PAGE_SETTLE_MS = 600L
-
-private val REVEAL_KINDS = setOf(
-    "error",
-    "expired",
-    "challenge-expired",
-    "execute-fallback-visible",
-    "render-exception",
-    "script-load-error",
-    "stalled",
-)
-
 private val TERMINAL_KINDS = setOf(
     "error",
     "expired",
     "challenge-expired",
     "render-exception",
     "script-load-error",
-    "stalled",
     "execute-failed",
     "execute-error",
 )
+private val REVEAL_KINDS = TERMINAL_KINDS + "open"
 
 internal data class CaptchaBridgeEvent(val kind: String, val value: String?)
 
@@ -298,27 +284,16 @@ private fun CaptchaFrame(
     val colors = MaterialTheme.colorScheme
     val navigator = rememberWebViewNavigator()
     val bridge = rememberWebViewJsBridge(navigator)
-    val webViewState = rememberWebViewState(CAPTCHA_PAGE_URL) {
-        customUserAgentString = captchaUserAgent()
-        androidWebSettings.apply {
-            useWideViewPort = true
-            domStorageEnabled = true
-        }
-    }
-
-    val isDark = background.luminance() < 0.5f
-    val script = remember(challenge, background) {
-        captchaInjectionScript(
+    val pageHtml = remember(challenge, background) {
+        captchaPageHtml(
             challenge = challenge,
             background = background.toCssHex(),
-            theme = if (isDark) "dark" else "light",
+            theme = if (background.luminance() < 0.5f) "dark" else "light",
         )
     }
-
-    val pageLoaded = webViewState.loadingState is LoadingState.Finished
-
-    var widgetReady by remember(script) { mutableStateOf(false) }
-    val events = remember(script) { Channel<CaptchaBridgeEvent>(Channel.UNLIMITED) }
+    val webViewState = rememberWebViewStateWithHTMLData(data = pageHtml, baseUrl = CAPTCHA_PAGE_URL)
+    var widgetReady by remember(pageHtml) { mutableStateOf(false) }
+    val events = remember(pageHtml) { Channel<CaptchaBridgeEvent>(Channel.UNLIMITED) }
     val handler = remember(events) { CaptchaBridgeHandler { events.trySend(it) } }
 
     DisposableEffect(bridge, handler) {
@@ -328,28 +303,21 @@ private fun CaptchaFrame(
 
     LaunchedEffect(webViewState) {
         webViewState.webSettings.isJavaScriptEnabled = true
-    }
-
-    LaunchedEffect(pageLoaded, script) {
-        if (pageLoaded) {
-            delay(PAGE_SETTLE_MS)
-            navigator.evaluateJavaScript(script)
+        webViewState.webSettings.customUserAgentString = captchaUserAgent()
+        webViewState.webSettings.androidWebSettings.apply {
+            useWideViewPort = true
+            domStorageEnabled = true
         }
     }
 
     LaunchedEffect(events) {
         for (event in events) {
             widgetReady = true
+            Logging.i("Captcha", "event: ${event.kind}${event.value?.let { ": $it" }.orEmpty()}")
             when (event.kind) {
                 "token" -> {
                     val token = event.value.orEmpty()
-                    if (token.isBlank()) {
-                        Logging.w("Captcha", "Captcha page returned an empty token")
-                        onFailure()
-                    } else {
-                        Logging.i("Captcha", "Received solved token, length=${token.length}")
-                        onToken(token)
-                    }
+                    if (token.isBlank()) onFailure() else onToken(token)
                 }
                 "open" -> {
                     onReveal()
@@ -357,9 +325,6 @@ private fun CaptchaFrame(
                 }
                 "close" -> onExpandedChange(false)
                 else -> {
-                    if (event.kind != "ready") {
-                        Logging.i("Captcha", "event: ${event.kind}${event.value?.let { ": $it" }.orEmpty()}")
-                    }
                     if (event.kind in REVEAL_KINDS) onReveal()
                     if (event.kind in TERMINAL_KINDS) onFailure()
                 }
@@ -406,328 +371,189 @@ private fun captchaUserAgent(): String {
     }
 }
 
+internal fun captchaPageHtml(
+    challenge: CaptchaChallenge,
+    background: String,
+    theme: String,
+): String {
+    val script = captchaInjectionScript(challenge, background, theme)
+    return """<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<style>
+html, body { margin: 0; padding: 0; background: $background; }
+#captcha { display: flex; justify-content: center; align-items: center; min-height: 78px; }
+</style>
+</head>
+<body>
+<div id="captcha"></div>
+<script>
+$script
+</script>
+</body>
+</html>
+"""
+}
+
 internal fun captchaInjectionScript(
     challenge: CaptchaChallenge,
     background: String,
     theme: String,
 ): String {
-    val sitekey = jsString(challenge.sitekey)
-    val rqdata = challenge.rqdata?.let { jsString(it) } ?: "null"
-    val bg = jsString(background)
-    val themeLiteral = jsString(theme)
-    val invisibleLiteral = if (challenge.isInvisible) "true" else "false"
-    val actionLiteral = jsString(RECAPTCHA_ENTERPRISE_ACTION)
-    val bridgeMethod = jsString(CAPTCHA_BRIDGE_METHOD)
-    val scriptSrc = jsString(
-        when (challenge.service) {
-            CaptchaService.HCAPTCHA -> "https://js.hcaptcha.com/1/api.js?render=explicit&onload=lampcordReady"
-            CaptchaService.RECAPTCHA -> "https://www.google.com/recaptcha/api.js?render=explicit&onload=lampcordReady"
-            CaptchaService.RECAPTCHA_ENTERPRISE ->
-                "https://www.google.com/recaptcha/enterprise.js?render=${challenge.sitekey.encodeURLParameter()}"
-        },
-    )
-    val serviceBlock = when (challenge.service) {
-        CaptchaService.HCAPTCHA -> HCAPTCHA_SERVICE_JS
-        CaptchaService.RECAPTCHA -> RECAPTCHA_SERVICE_JS
-        CaptchaService.RECAPTCHA_ENTERPRISE -> RECAPTCHA_ENTERPRISE_SERVICE_JS
+    val loadSrc = when (challenge.service) {
+        CaptchaService.HCAPTCHA -> "https://js.hcaptcha.com/1/api.js?render=explicit"
+        CaptchaService.RECAPTCHA -> "https://www.google.com/recaptcha/api.js?render=explicit"
+        CaptchaService.RECAPTCHA_ENTERPRISE ->
+            "https://www.google.com/recaptcha/enterprise.js?render=${challenge.sitekey.encodeURLParameter()}"
     }
-    val head = """
-(function () {
-  if (window.__lampcordTimer) { clearInterval(window.__lampcordTimer); }
-  var stale = document.getElementById('lampcord-captcha');
-  if (stale && stale.parentNode) { stale.parentNode.removeChild(stale); }
-  var staleStyle = document.getElementById('lampcord-captcha-style');
-  if (staleStyle && staleStyle.parentNode) { staleStyle.parentNode.removeChild(staleStyle); }
+    return """
+var SITEKEY = ${jsString(challenge.sitekey)};
+var RQDATA = ${challenge.rqdata?.let { jsString(it) } ?: "null"};
+var INVISIBLE = ${if (challenge.isInvisible) "true" else "false"};
+var THEME = ${jsString(theme)};
+var ACTION = ${jsString(RECAPTCHA_ENTERPRISE_ACTION)};
+var METHOD = ${jsString(CAPTCHA_BRIDGE_METHOD)};
+var SERVICE = ${jsString(challenge.service.wireName)};
+var LOAD_SRC = ${jsString(loadSrc)};
+var BACKGROUND = ${jsString(background)};
 
-  var doc = document;
+var seq = 0;
+var outbox = [];
+var widgetId = null;
+var rendered = false;
+var executed = false;
 
-  var lock = doc.createElement('style');
-  lock.id = 'lampcord-captcha-style';
-  lock.textContent = 'html,body{overflow:hidden !important;width:100% !important;height:100% !important;' +
-    'max-width:100% !important;margin:0 !important;overscroll-behavior:none !important;}' +
-    '#lampcord-captcha{overflow:hidden;overscroll-behavior:none;}';
-  (doc.head || doc.documentElement).appendChild(lock);
-
-  var viewport = doc.querySelector('meta[name="viewport"]');
-  if (!viewport) {
-    viewport = doc.createElement('meta');
-    viewport.name = 'viewport';
-    (doc.head || doc.documentElement).appendChild(viewport);
+function flush() {
+  var bridge = window.kmpJsBridge;
+  if (!bridge || typeof bridge.callNative !== 'function') { return; }
+  while (outbox.length > 0) {
+    try { bridge.callNative(METHOD, outbox[0], function () {}); } catch (e) { return; }
+    outbox.shift();
   }
-  viewport.content = 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no';
-
-  var SITEKEY = $sitekey;
-  var RQDATA = $rqdata;
-  var INVISIBLE = $invisibleLiteral;
-  var THEME = $themeLiteral;
-  var ACTION = $actionLiteral;
-  var METHOD = $bridgeMethod;
-  var STALL_MS = 15000;
-
-  var rendered = false;
-  var widgetId = null;
-  var executed = false;
-  var executeTries = 0;
-  var retryAfter = 0;
-  var solved = false;
-  var opened = false;
-  var stallReported = false;
-  var startedAt = Date.now();
-  var eventSeq = 0;
-  var outbox = [];
-  window.addEventListener('error', function (ev) {
-    send('js-error', String(ev.message || (ev.error && ev.error.message) || 'error').slice(0, 200));
-  });
-  window.addEventListener('unhandledrejection', function (ev) {
-    send('js-rejection', errorText(ev.reason));
-  });
-  var origConsoleError = console.error;
-  console.error = function () {
-    try {
-      send('console-error', Array.prototype.slice.call(arguments).map(function (a) { return String(a); }).join(' ').slice(0, 200));
-    } catch (_) {}
-    if (origConsoleError) { origConsoleError.apply(console, arguments); }
-  };
-
-  var overlay = doc.createElement('div');
-  overlay.id = 'lampcord-captcha';
-  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:100000;' +
-    'display:flex;align-items:center;justify-content:center;background:' + $bg + ';';
-  var box = doc.createElement('div');
-  box.id = 'lampcord-captcha-box';
-  box.style.cssText = 'width:300px;height:78px;max-width:100%;';
-  overlay.appendChild(box);
-  doc.documentElement.appendChild(overlay);
-
-  function flush() {
-    var bridge = window.kmpJsBridge;
-    if (!bridge || typeof bridge.callNative !== 'function') { return; }
-    while (outbox.length > 0) {
-      try { bridge.callNative(METHOD, outbox[0], function () {}); }
-      catch (e) { return; }
-      outbox.shift();
-    }
-  }
-  function send(kind, value) {
-    if (solved && kind !== 'token') { return; }
-    eventSeq++;
-    outbox.push(JSON.stringify({ seq: eventSeq, kind: kind, value: value === undefined ? null : value }));
-    flush();
-  }
-  function errorText(e) {
-    if (e === null || e === undefined) { return 'null'; }
-    if (typeof e === 'string') { return e.slice(0, 200); }
-    var parts = [];
-    try {
-      if (e.name) { parts.push(String(e.name)); }
-      if (e.message) { parts.push(String(e.message)); }
-      if (e.code !== undefined) { parts.push('code=' + String(e.code)); }
-    } catch (_) {}
-    if (parts.length) { return parts.join(': ').slice(0, 200); }
-    try { return JSON.stringify(e).slice(0, 200); } catch (_) {}
-    try { return Object.keys(e).join(',').slice(0, 200) || 'unknown'; } catch (_) {}
-    return 'unknown';
-  }
-
-  window.lampcordDone = function (token) {
-    if (solved) { return; }
-    solved = true;
-    send('token', token ? String(token) : '');
-  };
-  window.lampcordReady = function () { serviceRender(); };
-
-  function fit() {
-    var natural = box.scrollWidth;
-    var available = doc.documentElement.clientWidth - 24;
-    if (natural > 0 && natural > available) {
-      box.style.transformOrigin = 'center center';
-      box.style.transform = 'scale(' + (available / natural) + ')';
-    } else {
-      box.style.transform = '';
-    }
-  }
-
-  function checkStall() {
-    if (stallReported || solved || opened || !INVISIBLE) { return; }
-    if (Date.now() - startedAt < STALL_MS) { return; }
-    stallReported = true;
-    send('stalled');
-  }
-"""
-    val tail = """
-  window.__lampcordTimer = setInterval(function () {
-    flush();
-    if (solved) {
-      if (outbox.length === 0) { clearInterval(window.__lampcordTimer); }
-      return;
-    }
-    if (!overlay.isConnected) { doc.documentElement.appendChild(overlay); }
-    if (window.scrollX !== 0 || window.scrollY !== 0) { window.scrollTo(0, 0); }
-    serviceRender();
-    serviceExecute();
-    checkStall();
-    fit();
-  }, 500);
-
-  var s = doc.createElement('script');
-  s.src = $scriptSrc;
-  s.onerror = function () { send('script-load-error'); };
-  doc.documentElement.appendChild(s);
-})();
-"""
-    return head + serviceBlock + tail
 }
 
-private const val HCAPTCHA_SERVICE_JS = """
-  var renderTries = 0;
-  var renderRetryAt = 0;
-  function serviceRender() {
-    if (rendered || !window.hcaptcha || Date.now() < renderRetryAt) { return; }
-    rendered = true;
-    renderTries++;
-    var container = renderTries % 2 === 1 ? box : 'lampcord-captcha-box';
-    send('rendering', 'sitekey_len=' + String(SITEKEY).length + ' invisible=' + INVISIBLE + ' box_connected=' + box.isConnected + ' container=' + (container === box ? 'element' : 'id') + ' attempt=' + renderTries + ' id_lookup_ok=' + (doc.getElementById('lampcord-captcha-box') === box) + ' same_doc=' + (box.ownerDocument === doc) + ' in_root=' + doc.documentElement.contains(box) + ' instanceof_ok=' + (typeof HTMLElement === 'function' ? (box instanceof HTMLElement) : 'n/a') + ' view_ok=' + (box.ownerDocument ? box.ownerDocument.defaultView === window : 'n/a') + ' box_size=' + box.offsetWidth + 'x' + box.offsetHeight);
-    var opts = {
-      sitekey: SITEKEY,
-      theme: THEME,
-      callback: window.lampcordDone,
-      'open-callback': function () { opened = true; send('open'); },
-      'close-callback': function () { send('close'); },
-      'error-callback': function (code) { send('error', errorText(code)); },
-      'expired-callback': function () { send('expired'); },
-      'chalexpired-callback': function () { send('challenge-expired'); }
-    };
-    if (INVISIBLE) { opts.size = 'invisible'; }
-    try {
-      widgetId = hcaptcha.render(container, opts);
-    } catch (e) {
-      send('render-exception', errorText(e));
+function send(kind, value) {
+  seq++;
+  outbox.push(JSON.stringify({ seq: seq, kind: kind, value: value === undefined ? null : String(value) }));
+  flush();
+}
+
+function errorText(e) {
+  if (e === null || e === undefined) { return 'null'; }
+  if (typeof e === 'string') { return e.slice(0, 200); }
+  var parts = [];
+  if (e.name) { parts.push(String(e.name)); }
+  if (e.message) { parts.push(String(e.message)); }
+  if (parts.length) { return parts.join(': ').slice(0, 200); }
+  try { return JSON.stringify(e).slice(0, 200); } catch (_) { return 'unknown'; }
+}
+
+window.addEventListener('error', function (ev) { send('js-error', ev.message); });
+window.addEventListener('unhandledrejection', function (ev) { send('js-rejection', errorText(ev.reason)); });
+var nativeConsoleError = console.error;
+console.error = function () {
+  send('console-error', Array.prototype.map.call(arguments, String).join(' ').slice(0, 200));
+  if (nativeConsoleError) { nativeConsoleError.apply(console, arguments); }
+};
+setInterval(flush, 250);
+
+window.lampcordToken = function (token) { send('token', token || ''); };
+
+function serviceExecute() {
+  if (!INVISIBLE || widgetId === null || executed) { return; }
+  executed = true;
+  try { hcaptcha.execute(widgetId); } catch (e) { send('execute-failed', errorText(e)); }
+}
+
+function renderHcaptcha() {
+  rendered = true;
+  var opts = {
+    sitekey: SITEKEY,
+    theme: THEME,
+    callback: window.lampcordToken,
+    'open-callback': function () { send('open'); },
+    'close-callback': function () { send('close'); },
+    'error-callback': function (code) { send('error', code); },
+    'expired-callback': function () { send('expired'); },
+    'chalexpired-callback': function () { send('challenge-expired'); }
+  };
+  if (INVISIBLE) { opts.size = 'invisible'; }
+  try {
+    widgetId = hcaptcha.render('captcha', opts);
+  } catch (e) {
+    send('render-exception', errorText(e));
+    return;
+  }
+  if (widgetId === undefined || widgetId === null) {
+    send('render-exception', 'render returned no widget id');
+    return;
+  }
+  if (RQDATA) {
+    try { hcaptcha.setData(widgetId, { rqdata: RQDATA }); } catch (e) {
+      send('render-exception', 'setData: ' + errorText(e));
       return;
     }
-    if (widgetId === undefined || widgetId === null) {
-      var got = widgetId === undefined ? 'undefined' : 'null';
-      widgetId = null;
-      if (renderTries < 3) {
-        try { box.innerHTML = ''; } catch (_) {}
-        rendered = false;
-        renderRetryAt = Date.now() + 1000;
-        send('retry-render', 'attempt ' + renderTries + ' returned ' + got);
-        return;
-      }
-      send('render-exception', 'render returned ' + got + ' after ' + renderTries + ' attempts');
-      probeTestSitekey();
-      return;
-    }
-    send('rendered', String(widgetId));
-    if (RQDATA) {
-      try { hcaptcha.setData(widgetId, { rqdata: RQDATA }); }
-      catch (e) { send('render-exception', 'setData: ' + errorText(e)); return; }
-    }
-    send('ready');
   }
+  send('ready', widgetId);
+  serviceExecute();
+}
 
-  function probeTestSitekey() {
-    try {
-      var probe = doc.createElement('div');
-      probe.style.cssText = 'position:absolute;width:300px;height:78px;opacity:0;pointer-events:none;';
-      overlay.appendChild(probe);
-      var id = hcaptcha.render(probe, { sitekey: '10000000-ffff-ffff-ffff-000000000001' });
-      send('test-sitekey-render', (id === undefined || id === null) ? 'null' : 'ok ' + String(id));
-    } catch (e) {
-      send('test-sitekey-render', 'threw ' + errorText(e));
-    }
+function renderRecaptcha() {
+  rendered = true;
+  var opts = {
+    sitekey: SITEKEY,
+    theme: THEME,
+    callback: window.lampcordToken,
+    'expired-callback': function () { send('expired'); },
+    'error-callback': function () { send('error', 'recaptcha'); }
+  };
+  if (INVISIBLE) { opts.size = 'invisible'; }
+  try {
+    widgetId = grecaptcha.render('captcha', opts);
+  } catch (e) {
+    send('render-exception', errorText(e));
+    return;
   }
-
-  function fallbackToVisible(e) {
-    if (!INVISIBLE) { return; }
-    INVISIBLE = false;
+  send('ready', widgetId);
+  if (INVISIBLE && !executed) {
     executed = true;
-    rendered = false;
-    widgetId = null;
-    try { box.innerHTML = ''; } catch (_) {}
-    serviceRender();
-    if (widgetId !== null) { send('execute-fallback-visible', errorText(e)); }
+    try { grecaptcha.execute(widgetId); } catch (e) { send('execute-failed', errorText(e)); }
   }
+}
 
-  function serviceExecute() {
-    if (!INVISIBLE || widgetId === null || executed || executeTries >= 5) { return; }
-    if (Date.now() < retryAfter) { return; }
-    executeTries++;
-    try {
-      var pending = hcaptcha.execute(widgetId);
-      executed = true;
-      if (pending && typeof pending.catch === 'function') {
-        pending.catch(function (e) { fallbackToVisible(e); });
-      }
-    } catch (e) {
-      if (executeTries < 3) {
-        retryAfter = Date.now() + 1000;
-        send('retry-execute', executeTries + ': ' + errorText(e));
-      } else {
-        fallbackToVisible(e);
-      }
-    }
-  }
-"""
-
-private const val RECAPTCHA_SERVICE_JS = """
-  function serviceRender() {
-    if (rendered || !window.grecaptcha || typeof grecaptcha.render !== 'function') { return; }
-    rendered = true;
-    var opts = {
-      sitekey: SITEKEY,
-      theme: THEME,
-      callback: window.lampcordDone,
-      'expired-callback': function () { send('expired'); },
-      'error-callback': function () { send('error', 'recaptcha'); }
-    };
-    if (INVISIBLE) { opts.size = 'invisible'; }
-    try {
-      widgetId = grecaptcha.render(box, opts);
-      send('ready');
-    } catch (e) {
-      send('render-exception', errorText(e));
-    }
-  }
-
-  function serviceExecute() {
-    if (!INVISIBLE || widgetId === null || executed || executeTries >= 5) { return; }
-    executeTries++;
-    try {
-      executed = true;
-      opened = true;
-      grecaptcha.execute(widgetId);
-    } catch (e) {
-      send('execute-failed', executeTries + ': ' + errorText(e));
-    }
-  }
-"""
-
-private const val RECAPTCHA_ENTERPRISE_SERVICE_JS = """
-  var enterpriseReady = false;
-
-  function serviceRender() {
-    if (rendered || !window.grecaptcha || !grecaptcha.enterprise) { return; }
-    rendered = true;
-    grecaptcha.enterprise.ready(function () {
-      enterpriseReady = true;
-      send('ready');
-    });
-  }
-
-  function serviceExecute() {
-    if (!enterpriseReady || executed || executeTries >= 5) { return; }
-    executeTries++;
+function renderEnterprise() {
+  rendered = true;
+  grecaptcha.enterprise.ready(function () {
+    send('ready');
+    if (executed) { return; }
     executed = true;
     try {
       grecaptcha.enterprise.execute(SITEKEY, { action: ACTION })
-        .then(function (token) { window.lampcordDone(token); })
+        .then(function (token) { window.lampcordToken(token); })
         .catch(function (e) { send('execute-error', errorText(e)); });
     } catch (e) {
-      send('execute-failed', executeTries + ': ' + errorText(e));
+      send('execute-failed', errorText(e));
     }
-  }
-"""
+  });
+}
+
+window.lampcordReady = function () {
+  if (rendered) { return; }
+  if (SERVICE === 'hcaptcha') { renderHcaptcha(); }
+  else if (SERVICE === 'recaptcha') { renderRecaptcha(); }
+  else { renderEnterprise(); }
+};
+
+var loader = document.createElement('script');
+loader.src = LOAD_SRC;
+loader.async = true;
+loader.onload = function () { window.lampcordReady(); };
+loader.onerror = function () { send('script-load-error'); };
+document.head.appendChild(loader);
+""".trimIndent()
+}
 
 private fun jsString(value: String): String = JsonPrimitive(value).toString()
 

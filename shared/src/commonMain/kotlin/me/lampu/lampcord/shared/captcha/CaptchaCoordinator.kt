@@ -12,6 +12,12 @@ import me.lampu.lampcord.shared.utils.Logging
 
 internal const val CAPTCHA_SOLVE_TIMEOUT_MS = 5 * 60_000L
 
+sealed interface CaptchaOutcome {
+    data class Solved(val token: String) : CaptchaOutcome
+    data object Cancelled : CaptchaOutcome
+    data object TimedOut : CaptchaOutcome
+}
+
 class CaptchaRequest(
     val id: Long,
     val challenge: CaptchaChallenge,
@@ -24,19 +30,25 @@ class CaptchaCoordinator {
     val pending: StateFlow<CaptchaRequest?> = _pending.asStateFlow()
     private var nextId = 0L
 
-    suspend fun solve(challenge: CaptchaChallenge): String? = mutex.withLock {
+    suspend fun solve(challenge: CaptchaChallenge): CaptchaOutcome = mutex.withLock {
         val request = CaptchaRequest(++nextId, challenge, CompletableDeferred())
         _pending.value = request
         try {
             val token = withTimeoutOrNull(CAPTCHA_SOLVE_TIMEOUT_MS) { request.result.await() }
-            if (token == null) {
-                if (request.result.isCompleted) {
+            when {
+                token != null -> {
+                    Logging.i("Captcha", "Captcha ${request.id} solved")
+                    CaptchaOutcome.Solved(token)
+                }
+                request.result.isCompleted -> {
                     Logging.i("Captcha", "Captcha ${request.id} was cancelled")
-                } else {
+                    CaptchaOutcome.Cancelled
+                }
+                else -> {
                     Logging.w("Captcha", "Captcha ${request.id} timed out after ${CAPTCHA_SOLVE_TIMEOUT_MS / 1000}s")
+                    CaptchaOutcome.TimedOut
                 }
             }
-            token
         } finally {
             _pending.value = null
         }

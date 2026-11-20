@@ -9,11 +9,17 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.content.OutgoingContent
 import me.lampu.lampcord.shared.captcha.CaptchaCoordinator
+import me.lampu.lampcord.shared.captcha.CaptchaOutcome
 import me.lampu.lampcord.shared.utils.Logging
 
-class CaptchaCancelledException : Exception("Captcha was cancelled")
+open class CaptchaCancelledException(message: String = "Captcha was cancelled") : Exception(message)
+
+class CaptchaTimeoutException : CaptchaCancelledException("Captcha timed out")
 
 private const val MAX_CAPTCHA_ATTEMPTS = 3
+private const val CAPTCHA_KEY_HEADER = "X-Captcha-Key"
+private const val CAPTCHA_RQTOKEN_HEADER = "X-Captcha-Rqtoken"
+private const val CAPTCHA_SESSION_HEADER = "X-Captcha-Session-Id"
 
 class CaptchaPluginConfig {
     lateinit var coordinator: CaptchaCoordinator
@@ -29,7 +35,7 @@ val LampcordCaptchaPlugin = createClientPlugin("LampcordCaptcha", ::CaptchaPlugi
             call = call.save()
             val challenge = parseCaptchaChallenge(call.response.bodyAsText())
             if (challenge == null) {
-                Logging.w("Captcha", "400 response without a usable captcha challenge; not retrying")
+                Logging.i("Captcha", "400 response is not a captcha challenge; returning it unchanged")
                 break
             }
             if (attempts >= MAX_CAPTCHA_ATTEMPTS) {
@@ -41,29 +47,26 @@ val LampcordCaptchaPlugin = createClientPlugin("LampcordCaptcha", ::CaptchaPlugi
                 break
             }
             attempts++
-            Logging.i("Captcha", "Solving ${challenge.service.wireName} challenge, attempt $attempts")
-            val token = coordinator.solve(challenge) ?: throw CaptchaCancelledException()
-            applyCaptchaHeaders(builder, token, challenge.rqtoken, challenge.sessionId)
+            Logging.i(
+                "Captcha",
+                "Solving ${challenge.service.wireName} challenge, attempt $attempts of $MAX_CAPTCHA_ATTEMPTS",
+            )
+            when (val outcome = coordinator.solve(challenge)) {
+                is CaptchaOutcome.Solved -> applyCaptchaHeaders(builder, outcome.token, challenge)
+                CaptchaOutcome.Cancelled -> throw CaptchaCancelledException()
+                CaptchaOutcome.TimedOut -> throw CaptchaTimeoutException()
+            }
             call = execute(builder)
         }
         call
     }
 }
 
-private fun applyCaptchaHeaders(
-    builder: HttpRequestBuilder,
-    token: String,
-    rqtoken: String?,
-    sessionId: String?,
-) {
+private fun applyCaptchaHeaders(builder: HttpRequestBuilder, token: String, challenge: CaptchaChallenge) {
     builder.headers.remove(CAPTCHA_KEY_HEADER)
     builder.headers.remove(CAPTCHA_RQTOKEN_HEADER)
     builder.headers.remove(CAPTCHA_SESSION_HEADER)
     builder.headers.append(CAPTCHA_KEY_HEADER, token)
-    rqtoken?.let { builder.headers.append(CAPTCHA_RQTOKEN_HEADER, it) }
-    sessionId?.let { builder.headers.append(CAPTCHA_SESSION_HEADER, it) }
+    challenge.rqtoken?.let { builder.headers.append(CAPTCHA_RQTOKEN_HEADER, it) }
+    challenge.sessionId?.let { builder.headers.append(CAPTCHA_SESSION_HEADER, it) }
 }
-
-private const val CAPTCHA_KEY_HEADER = "X-Captcha-Key"
-private const val CAPTCHA_RQTOKEN_HEADER = "X-Captcha-Rqtoken"
-private const val CAPTCHA_SESSION_HEADER = "X-Captcha-Session-Id"
