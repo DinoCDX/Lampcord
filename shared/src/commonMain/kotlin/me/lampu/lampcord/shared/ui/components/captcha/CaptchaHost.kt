@@ -585,9 +585,15 @@ private const val HCAPTCHA_SERVICE_JS = """
       send('render-exception', errorText(e));
       return;
     }
-    if (RQDATA && widgetId !== null) {
+    if (widgetId === undefined || widgetId === null) {
+      widgetId = null;
+      send('render-exception', 'render returned no widget id');
+      return;
+    }
+    send('rendered', String(widgetId));
+    if (RQDATA) {
       try { hcaptcha.setData(widgetId, { rqdata: RQDATA }); }
-      catch (e) { send('set-data-error', errorText(e)); }
+      catch (e) { send('render-exception', 'setData: ' + errorText(e)); return; }
     }
     send('ready');
   }
