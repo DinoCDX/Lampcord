@@ -73,19 +73,13 @@ import me.lampu.lampcord.shared.utils.isEmbeddedWebViewAvailable
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.koinInject
 
-/**
- * Origin the captcha page is loaded under. hCaptcha and reCAPTCHA check the page origin against
- * the sitekey's registered domains, so this must stay on discord.com.
- */
 private const val CAPTCHA_PAGE_URL = "https://discord.com/login"
 
-/** Name of the JS-to-native method the captcha page calls through the Nucleus bridge. */
 internal const val CAPTCHA_BRIDGE_METHOD = "lampcord.captcha"
 
 private const val CAPTCHA_CHROME_VERSION = "131.0.0.0"
 private const val HIDDEN_CARD_ALPHA = 0.02f
 
-/** Events that should reveal the dialog so the user can see or act on the widget. */
 private val REVEAL_KINDS = setOf(
     "error",
     "expired",
@@ -96,7 +90,6 @@ private val REVEAL_KINDS = setOf(
     "stalled",
 )
 
-/** Events that mean this challenge will not finish without a retry. */
 private val TERMINAL_KINDS = setOf(
     "error",
     "expired",
@@ -108,17 +101,14 @@ private val TERMINAL_KINDS = setOf(
     "execute-error",
 )
 
-/** One message from the captcha page, delivered through the JS bridge. */
 internal data class CaptchaBridgeEvent(val kind: String, val value: String?)
 
-/** Parses the JSON payload the captcha page sends. Returns null if it is malformed. */
 internal fun parseCaptchaBridgeEvent(params: String): CaptchaBridgeEvent? = runCatching {
     val obj = Json.parseToJsonElement(params).jsonObject
     val kind = obj["kind"]?.jsonPrimitive?.contentOrNull ?: return@runCatching null
     CaptchaBridgeEvent(kind, obj["value"]?.jsonPrimitive?.contentOrNull)
 }.getOrNull()
 
-/** Receives each captcha page message. Every message arrives individually, so none are overwritten. */
 internal class CaptchaBridgeHandler(
     private val onEvent: (CaptchaBridgeEvent) -> Unit,
 ) : IJsMessageHandler {
@@ -189,7 +179,6 @@ private fun CaptchaDialogContent(
                 .widthIn(max = 420.dp)
                 .fillMaxWidth()
                 .padding(outerPadding)
-                // The WebView must stay laid out and on-screen while hidden, or hCaptcha cannot run.
                 .graphicsLayer { alpha = cardAlpha },
             shape = RoundedCornerShape(28.dp),
             color = colors.surfaceContainerHigh,
@@ -211,7 +200,6 @@ private fun CaptchaDialogContent(
                 }
                 Spacer(Modifier.height(if (expanded) 12.dp else 20.dp))
                 if (webViewAvailable) {
-                    // Keyed on attempt so a retry gets a brand-new WebView and page load.
                     key(attempt) {
                         CaptchaFrame(
                             challenge = challenge,
@@ -307,7 +295,6 @@ private fun CaptchaFrame(
             theme = if (isDark) "dark" else "light",
         )
     }
-    // The captcha script runs inside the page itself, so there is no load-timing race to manage.
     val webViewState = rememberWebViewStateWithHTMLData(data = pageHtml, baseUrl = CAPTCHA_PAGE_URL)
 
     var widgetReady by remember(pageHtml) { mutableStateOf(false) }
@@ -397,7 +384,6 @@ private fun captchaUserAgent(): String {
     }
 }
 
-/** Full HTML document that runs the captcha in an otherwise empty page. */
 internal fun captchaPageHtml(
     challenge: CaptchaChallenge,
     background: String,
@@ -498,8 +484,6 @@ internal fun captchaInjectionScript(
   overlay.appendChild(box);
   doc.documentElement.appendChild(overlay);
 
-  // Hands queued messages to the native bridge. The bridge is injected after page load on mobile,
-  // so messages sent earlier wait here until it exists.
   function flush() {
     var bridge = window.kmpJsBridge;
     if (!bridge || typeof bridge.callNative !== 'function') { return; }
@@ -548,7 +532,6 @@ internal fun captchaInjectionScript(
     }
   }
 
-  // Invisible challenges that never open a visible challenge are reported as stalled.
   function checkStall() {
     if (stallReported || solved || opened || !INVISIBLE) { return; }
     if (Date.now() - startedAt < STALL_MS) { return; }
@@ -608,7 +591,6 @@ private const val HCAPTCHA_SERVICE_JS = """
     send('ready');
   }
 
-  // Falls back to a visible widget. The fallback event is sent after the re-render, so it is the last word.
   function fallbackToVisible(e) {
     if (!INVISIBLE) { return; }
     INVISIBLE = false;

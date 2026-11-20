@@ -90,12 +90,10 @@ kotlin {
         iosSimulatorArm64()
     ).forEach {
         it.compilations.all {
-            compileTaskProvider.configure {
-                compilerOptions {
-                    freeCompilerArgs.add(
-                        "-Xdisable-phases=DevirtualizationAnalysis,DCEPhase,RemoveRedundantCallsToStaticInitializersPhase"
-                    )
-                }
+            compilerOptions.configure {
+                freeCompilerArgs.add(
+                    "-Xdisable-phases=DevirtualizationAnalysis,DCEPhase,RemoveRedundantCallsToStaticInitializersPhase"
+                )
             }
         }
         it.binaries.framework {
@@ -115,7 +113,7 @@ kotlin {
     }
 
     sourceSets {
-        val jvmSharedMain = create("jvmSharedMain") {
+        val jvmSharedMain by creating {
             dependsOn(commonMain.get())
             dependencies {
                 implementation(libs.slf4j.simple)
@@ -157,7 +155,7 @@ kotlin {
             implementation(libs.multiplatform.settings.no.arg)
 
             api(libs.androidx.navigation3.runtime)
-            api("androidx.navigationevent:navigationevent-compose:${libs.versions.navigationEvent.get()}")
+            api(libs.androidx.navigationevent.compose)
 
             implementation(libs.room.runtime)
             implementation(libs.sqlite.bundled)
@@ -167,7 +165,7 @@ kotlin {
 
             implementation(libs.coil.compose)
             implementation(libs.coil.network.ktor3)
-            implementation("io.coil-kt.coil3:coil-svg:${libs.versions.coil.get()}")
+            implementation(libs.coil.svg)
             implementation(libs.composeWebview)
         }
 

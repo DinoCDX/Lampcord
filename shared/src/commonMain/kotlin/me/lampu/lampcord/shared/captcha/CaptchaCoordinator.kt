@@ -10,7 +10,6 @@ import kotlinx.coroutines.withTimeoutOrNull
 import me.lampu.lampcord.shared.api.CaptchaChallenge
 import me.lampu.lampcord.shared.utils.Logging
 
-/** How long a single captcha may stay open before the pending login or join gives up. */
 internal const val CAPTCHA_SOLVE_TIMEOUT_MS = 5 * 60_000L
 
 class CaptchaRequest(
@@ -43,22 +42,18 @@ class CaptchaCoordinator {
         }
     }
 
-    /** Completes whichever captcha is currently pending. */
     fun complete(token: String) {
         _pending.value?.result?.complete(token)
     }
 
-    /** Completes only [request], so a stale UI callback cannot answer a newer challenge. */
     fun complete(request: CaptchaRequest, token: String) {
         if (_pending.value === request) request.result.complete(token)
     }
 
-    /** Cancels whichever captcha is currently pending. */
     fun cancel() {
         _pending.value?.result?.complete(null)
     }
 
-    /** Cancels only [request], so a stale dismiss cannot cancel a newer challenge. */
     fun cancel(request: CaptchaRequest) {
         if (_pending.value === request) request.result.complete(null)
     }
