@@ -483,6 +483,19 @@ internal fun captchaInjectionScript(
   var startedAt = Date.now();
   var eventSeq = 0;
   var outbox = [];
+  window.addEventListener('error', function (ev) {
+    send('js-error', String(ev.message || (ev.error && ev.error.message) || 'error').slice(0, 200));
+  });
+  window.addEventListener('unhandledrejection', function (ev) {
+    send('js-rejection', errorText(ev.reason));
+  });
+  var origConsoleError = console.error;
+  console.error = function () {
+    try {
+      send('console-error', Array.prototype.slice.call(arguments).map(function (a) { return String(a); }).join(' ').slice(0, 200));
+    } catch (_) {}
+    if (origConsoleError) { origConsoleError.apply(console, arguments); }
+  };
 
   var overlay = doc.createElement('div');
   overlay.id = 'lampcord-captcha';
@@ -573,9 +586,12 @@ internal fun captchaInjectionScript(
 }
 
 private const val HCAPTCHA_SERVICE_JS = """
+  var renderTries = 0;
+  var renderRetryAt = 0;
   function serviceRender() {
-    if (rendered || !window.hcaptcha) { return; }
+    if (rendered || !window.hcaptcha || Date.now() < renderRetryAt) { return; }
     rendered = true;
+    renderTries++;
     send('rendering', 'sitekey_len=' + String(SITEKEY).length + ' invisible=' + INVISIBLE + ' box_connected=' + box.isConnected + ' render_type=' + typeof hcaptcha.render);
     var opts = {
       sitekey: SITEKEY,
@@ -595,8 +611,16 @@ private const val HCAPTCHA_SERVICE_JS = """
       return;
     }
     if (widgetId === undefined || widgetId === null) {
+      var got = widgetId === undefined ? 'undefined' : 'null';
       widgetId = null;
-      send('render-exception', 'render returned no widget id (type=' + typeof widgetId + ' value=' + String(widgetId) + ')');
+      if (renderTries < 3) {
+        try { box.innerHTML = ''; } catch (_) {}
+        rendered = false;
+        renderRetryAt = Date.now() + 1000;
+        send('retry-render', 'attempt ' + renderTries + ' returned ' + got);
+        return;
+      }
+      send('render-exception', 'render returned ' + got + ' after ' + renderTries + ' attempts');
       return;
     }
     send('rendered', String(widgetId));
