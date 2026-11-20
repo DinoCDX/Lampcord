@@ -361,16 +361,13 @@ class GuildApi(
             val response = postJoin(inviteCode)
             val body = if (response.status.isSuccess()) "" else response.bodyAsText()
             if (!response.status.isSuccess()) {
-                val discordErr = rest.discordError(body)
                 val failed = if (isCaptchaResponseBody(body)) {
                     JoinGuildResult.Failed(JoinFailure.CaptchaRejected)
                 } else {
-                    joinFailureFor(discordErr?.code, discordErr?.message, response.status)
+                    val error = rest.discordError(body)
+                    joinFailureFor(error?.code, error?.message, response.status)
                 }
-                Logging.e(
-                    "Invite",
-                    "Join failed for $inviteCode: HTTP ${response.status.value}, captchaRejected=${isCaptchaResponseBody(body)}, discordCode=${discordErr?.code}, message=${discordErr?.message}",
-                )
+                Logging.e("Invite", "Join failed for $inviteCode: HTTP ${response.status.value}, captchaRejected=${isCaptchaResponseBody(body)}")
                 return failed
             }
             val guild = runCatching { response.body<Invite>() }.getOrNull()?.guild

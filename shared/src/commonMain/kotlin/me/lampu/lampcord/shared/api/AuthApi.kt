@@ -46,7 +46,7 @@ class AuthApi(
         return try {
             rest.httpClient.get("${rest.apiBase}/experiments") {
                 loginHeaders(rest)
-            }.body<FingerprintResponse>().fingerprint.also { rest.setFingerprint(it) }
+            }.body<FingerprintResponse>().fingerprint
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
