@@ -42,7 +42,7 @@ import dev.nucleusframework.webview.jsbridge.IJsMessageHandler
 import dev.nucleusframework.webview.jsbridge.JsMessage
 import dev.nucleusframework.webview.web.WebView
 import dev.nucleusframework.webview.web.WebViewNavigator
-import dev.nucleusframework.webview.web.rememberWebViewJsBridge
+import dev.nucleusframework.webview.jsbridge.rememberWebViewJsBridge
 import dev.nucleusframework.webview.web.rememberWebViewNavigator
 import dev.nucleusframework.webview.web.rememberWebViewStateWithHTMLData
 import kotlinx.coroutines.channels.Channel
@@ -308,9 +308,8 @@ private class CaptchaBridgeHandler(
         message: JsMessage,
         navigator: WebViewNavigator?,
         callback: (String) -> Unit,
-    ): Boolean {
+    ) {
         parseCaptchaBridgeEvent(message.params)?.let { events.trySend(it) }
-        return true
     }
 }
 
