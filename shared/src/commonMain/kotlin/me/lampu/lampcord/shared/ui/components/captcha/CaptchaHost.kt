@@ -615,6 +615,7 @@ private const val HCAPTCHA_SERVICE_JS = """
         return;
       }
       send('render-exception', 'render returned ' + got + ' after ' + renderTries + ' attempts');
+      probeTestSitekey();
       return;
     }
     send('rendered', String(widgetId));
@@ -623,6 +624,18 @@ private const val HCAPTCHA_SERVICE_JS = """
       catch (e) { send('render-exception', 'setData: ' + errorText(e)); return; }
     }
     send('ready');
+  }
+
+  function probeTestSitekey() {
+    try {
+      var probe = doc.createElement('div');
+      probe.style.cssText = 'width:0;height:0;overflow:hidden;';
+      overlay.appendChild(probe);
+      var id = hcaptcha.render(probe, { sitekey: '10000000-ffff-ffff-ffff-000000000001' });
+      send('test-sitekey-render', (id === undefined || id === null) ? 'null' : 'ok ' + String(id));
+    } catch (e) {
+      send('test-sitekey-render', 'threw ' + errorText(e));
+    }
   }
 
   function fallbackToVisible(e) {
