@@ -43,12 +43,13 @@ class RestClient(
     val json: Json
 ) {
     var token: String? = null
+        private set
     var fingerprint: String? = null
+        private set
 
     fun setFingerprint(value: String?) {
         fingerprint = value
     }
-        private set
 
     fun closeClient() {
         httpClient.close()
