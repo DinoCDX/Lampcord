@@ -46,7 +46,7 @@ class ThemeStore(
         prettyPrint = true
         isLenient = true
     }
-    private val httpClient = HttpClient(me.lampu.lampcord.shared.api.httpClientEngine())
+    private val httpClient = HttpClient()
 
     init {
         loadInstalledThemes()

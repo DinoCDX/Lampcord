@@ -189,7 +189,7 @@ fun FriendsList(
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(filteredRelationships, key = { it.id ?: it.user_id ?: it.hashCode().toString() }) { relationship ->
+                    items(filteredRelationships) { relationship ->
                         FriendItem(relationship)
                     }
                 }

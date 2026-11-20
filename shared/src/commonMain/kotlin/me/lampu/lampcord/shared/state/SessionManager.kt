@@ -130,12 +130,11 @@ class SessionManager(
 
     fun signOut() {
         val token = Settings.shared.discordToken.trim()
-        if (token.isEmpty()) {
-            disconnect()
-            return
+        disconnect()
+        if (token.isNotEmpty()) {
+            tokenStore.removeAccount(token)
+            scope.launch { authApi.logoutRemote(token) }
         }
-        scope.launch { authApi.logoutRemote(token) }
-        removeActiveAccount(token)
     }
 
     fun switchAccount(token: String) {
@@ -145,22 +144,9 @@ class SessionManager(
 
     fun logout(token: String) {
         val cleanToken = token.trim()
+        tokenStore.removeAccount(cleanToken)
         if (Settings.shared.discordToken.trim() == cleanToken) {
-            removeActiveAccount(cleanToken)
-        } else {
-            tokenStore.removeAccount(cleanToken)
-        }
-    }
-
-    private fun removeActiveAccount(token: String) {
-        val accounts = tokenStore.getAccounts()
-        val index = accounts.indexOfFirst { it.token == token }.coerceAtLeast(0)
-        tokenStore.removeAccount(token)
-        val remaining = tokenStore.getAccounts()
-        if (remaining.isEmpty()) {
             disconnect()
-        } else {
-            switchAccount(remaining[index.coerceAtMost(remaining.lastIndex)].token)
         }
     }
 

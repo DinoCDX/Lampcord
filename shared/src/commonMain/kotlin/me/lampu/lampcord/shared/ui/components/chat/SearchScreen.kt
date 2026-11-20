@@ -302,7 +302,7 @@ private fun SearchScreenContent(
                                         color = MaterialTheme.colorScheme.primary
                                     )
                                 }
-                                items(SEARCH_FILTER_DEFS, key = { it.key }) { def ->
+                                items(SEARCH_FILTER_DEFS) { def ->
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -351,7 +351,7 @@ private fun SearchScreenContent(
                                             }
                                         }
                                     }
-                                    items(searchStore.searchHistory, key = { it }) { query ->
+                                    items(searchStore.searchHistory) { query ->
                                         Row(
                                             modifier = Modifier
                                                 .fillMaxWidth()
@@ -408,7 +408,7 @@ private fun SearchScreenContent(
                                     bottom = 80.dp + WindowInsets.ime.union(WindowInsets.navigationBars).asPaddingValues().calculateBottomPadding()
                                 )
                             ) {
-                                items(searchStore.searchResults, key = { it.id }) { message ->
+                                items(searchStore.searchResults) { message ->
                                     val channel = guildStore.allGuildChannels.value[message.channel_id] ?: guildStore.privateChannels.value.find { it.id == message.channel_id }
                                     val guild = guildStore.guilds.value.firstOrNull { it.id == message.guild_id }
                                     val isDmSearch = navigationStore.selectedGuild == null

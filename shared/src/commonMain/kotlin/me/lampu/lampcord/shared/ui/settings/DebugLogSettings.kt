@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -134,7 +133,7 @@ fun DebugLogScreen(onBack: () -> Unit) {
                         label = { Text(stringResource(Res.string.lampcord_settings_all)) }
                     )
                 }
-                items(levels, key = { it }) { level ->
+                items(levels) { level ->
                     FilterChip(
                         selected = filterLevel == level,
                         onClick = { filterLevel = if (filterLevel == level) null else level },
@@ -166,7 +165,7 @@ fun DebugLogScreen(onBack: () -> Unit) {
                             label = { Text(stringResource(Res.string.lampcord_settings_all_tags)) }
                         )
                     }
-                    items(tags, key = { it }) { tag ->
+                    items(tags) { tag ->
                         FilterChip(
                             selected = filterTag == tag,
                             onClick = { filterTag = if (filterTag == tag) null else tag },
@@ -185,7 +184,7 @@ fun DebugLogScreen(onBack: () -> Unit) {
                 state = listState,
                 contentPadding = PaddingValues(8.dp)
             ) {
-                itemsIndexed(filteredLogs, key = { index, entry -> "$index|${entry.timestamp}" }) { _, entry ->
+                items(filteredLogs) { entry ->
                     LogEntryItem(entry)
                 }
             }

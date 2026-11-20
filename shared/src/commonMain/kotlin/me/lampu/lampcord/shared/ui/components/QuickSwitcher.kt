@@ -104,7 +104,7 @@ fun QuickSwitcher(
                             contentPadding = PaddingValues(8.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            items(results, key = { it.key }) { result ->
+                            items(results) { result ->
                                 FinderResultRow(result, onClick = {
                                     when (result) {
                                         is FinderResult.Guild -> navigationStore.selectGuild(result.guild) { gatewayManager.sendSubscription(it) }

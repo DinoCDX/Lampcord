@@ -516,8 +516,7 @@ fun EmojiGrid(
                             modifier = Modifier.padding(top = 16.dp, bottom = 4.dp, start = 4.dp)
                         )
                     }
-                    items(count = group.emojis.size, key = { i -> "$i|${group.emojis[i].id ?: group.emojis[i].name}" }) { i ->
-                        val emoji = group.emojis[i]
+                    items(group.emojis) { emoji ->
                         val url = emoji.getDisplayUrl()
                         val isAnimated = emoji.animated == true
                         val displayUrl = if (Settings.shared.reduceMotion &&
@@ -628,7 +627,7 @@ private fun EmojiServerBar(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            itemsIndexed(groups, key = { index, group -> "$index|${group.id}" }) { index, group ->
+            itemsIndexed(groups) { index, group ->
                 val selected = selectedIndex == index
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Box(
