@@ -495,7 +495,7 @@ internal fun captchaInjectionScript(
     'display:flex;align-items:center;justify-content:center;background:' + $bg + ';';
   var box = doc.createElement('div');
   box.id = 'lampcord-captcha-box';
-  box.style.cssText = 'max-width:100%;';
+  box.style.cssText = 'width:300px;height:78px;max-width:100%;';
   overlay.appendChild(box);
   doc.documentElement.appendChild(overlay);
 
@@ -586,7 +586,7 @@ private const val HCAPTCHA_SERVICE_JS = """
     rendered = true;
     renderTries++;
     var container = renderTries % 2 === 1 ? box : 'lampcord-captcha-box';
-    send('rendering', 'sitekey_len=' + String(SITEKEY).length + ' invisible=' + INVISIBLE + ' box_connected=' + box.isConnected + ' container=' + (container === box ? 'element' : 'id') + ' attempt=' + renderTries + ' id_lookup_ok=' + (doc.getElementById('lampcord-captcha-box') === box) + ' same_doc=' + (box.ownerDocument === doc) + ' in_root=' + doc.documentElement.contains(box) + ' instanceof_ok=' + (typeof HTMLElement === 'function' ? (box instanceof HTMLElement) : 'n/a') + ' view_ok=' + (box.ownerDocument ? box.ownerDocument.defaultView === window : 'n/a'));
+    send('rendering', 'sitekey_len=' + String(SITEKEY).length + ' invisible=' + INVISIBLE + ' box_connected=' + box.isConnected + ' container=' + (container === box ? 'element' : 'id') + ' attempt=' + renderTries + ' id_lookup_ok=' + (doc.getElementById('lampcord-captcha-box') === box) + ' same_doc=' + (box.ownerDocument === doc) + ' in_root=' + doc.documentElement.contains(box) + ' instanceof_ok=' + (typeof HTMLElement === 'function' ? (box instanceof HTMLElement) : 'n/a') + ' view_ok=' + (box.ownerDocument ? box.ownerDocument.defaultView === window : 'n/a') + ' box_size=' + box.offsetWidth + 'x' + box.offsetHeight);
     var opts = {
       sitekey: SITEKEY,
       theme: THEME,
@@ -629,7 +629,7 @@ private const val HCAPTCHA_SERVICE_JS = """
   function probeTestSitekey() {
     try {
       var probe = doc.createElement('div');
-      probe.style.cssText = 'width:0;height:0;overflow:hidden;';
+      probe.style.cssText = 'position:absolute;width:300px;height:78px;opacity:0;pointer-events:none;';
       overlay.appendChild(probe);
       var id = hcaptcha.render(probe, { sitekey: '10000000-ffff-ffff-ffff-000000000001' });
       send('test-sitekey-render', (id === undefined || id === null) ? 'null' : 'ok ' + String(id));
