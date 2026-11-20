@@ -1,4 +1,4 @@
-# Lampcord
+# Lampcord.
 
 Lampcord is a lightweight Discord client built with Compose Multiplatform for Mobile and Desktop. It aims for a native, fast, and customizable Discord experience without the bloat and heavy memory footprint of Electron or WebViews.
 
