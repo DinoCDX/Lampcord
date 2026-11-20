@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ContainedLoadingIndicator
@@ -228,6 +229,21 @@ private fun CaptchaDialogContent(
                             style = MaterialTheme.typography.bodyMedium,
                             color = colors.error,
                         )
+                    }
+                } else {
+                    Text(
+                        text = stringResource(Res.string.lampcord_captcha_webview_missing),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colors.error,
+                    )
+                }
+                Spacer(Modifier.height(16.dp))
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (failed) {
                         TextButton(
                             onClick = {
                                 Logging.i("Captcha", "Retrying captcha after a failure")
@@ -238,16 +254,8 @@ private fun CaptchaDialogContent(
                         ) {
                             Text(stringResource(Res.string.lampcord_captcha_retry), color = colors.primary)
                         }
+                        Spacer(Modifier.width(8.dp))
                     }
-                } else {
-                    Text(
-                        text = stringResource(Res.string.lampcord_captcha_webview_missing),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = colors.error,
-                    )
-                }
-                Spacer(Modifier.height(16.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     TextButton(onClick = onCancel) {
                         Text(stringResource(Res.string.cancel), color = colors.primary)
                     }
@@ -568,6 +576,7 @@ private const val HCAPTCHA_SERVICE_JS = """
   function serviceRender() {
     if (rendered || !window.hcaptcha) { return; }
     rendered = true;
+    send('rendering', 'sitekey_len=' + String(SITEKEY).length + ' invisible=' + INVISIBLE + ' box_connected=' + box.isConnected + ' render_type=' + typeof hcaptcha.render);
     var opts = {
       sitekey: SITEKEY,
       theme: THEME,
@@ -587,7 +596,7 @@ private const val HCAPTCHA_SERVICE_JS = """
     }
     if (widgetId === undefined || widgetId === null) {
       widgetId = null;
-      send('render-exception', 'render returned no widget id');
+      send('render-exception', 'render returned no widget id (type=' + typeof widgetId + ' value=' + String(widgetId) + ')');
       return;
     }
     send('rendered', String(widgetId));
