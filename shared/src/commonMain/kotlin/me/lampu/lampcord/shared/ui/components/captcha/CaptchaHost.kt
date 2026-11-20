@@ -95,6 +95,9 @@ internal data class CaptchaBridgeEvent(
     val value: String?,
 )
 
+private fun loggedValue(event: CaptchaBridgeEvent): String =
+    if (event.kind == "token") "${event.value?.length ?: 0} chars" else event.value.orEmpty()
+
 internal fun parseCaptchaBridgeEvent(params: String): CaptchaBridgeEvent? {
     val obj = runCatching { Json.parseToJsonElement(params).jsonObject }.getOrNull() ?: return null
     val kind = obj["kind"]?.jsonPrimitive?.contentOrNull ?: return null
@@ -259,8 +262,11 @@ private fun CaptchaFrame(
     }
 
     LaunchedEffect(events) {
+        var lastSeq = 0L
         for (event in events) {
-            Logging.i("Captcha", "event: ${event.kind}: ${event.value.orEmpty()}")
+            if (event.seq <= lastSeq) continue
+            lastSeq = event.seq
+            Logging.i("Captcha", "event: ${event.kind}: ${loggedValue(event)}")
             when (event.kind) {
                 "ready" -> ready = true
                 "open" -> onExpandedChange(true)
