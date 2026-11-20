@@ -69,4 +69,8 @@ private fun applyCaptchaHeaders(builder: HttpRequestBuilder, token: String, chal
     builder.headers.append(CAPTCHA_KEY_HEADER, token)
     challenge.rqtoken?.let { builder.headers.append(CAPTCHA_RQTOKEN_HEADER, it) }
     challenge.sessionId?.let { builder.headers.append(CAPTCHA_SESSION_HEADER, it) }
+    Logging.i(
+        "Captcha",
+        "Retrying with key length=${token.length}, rqtoken=${challenge.rqtoken != null}, session=${challenge.sessionId != null}",
+    )
 }

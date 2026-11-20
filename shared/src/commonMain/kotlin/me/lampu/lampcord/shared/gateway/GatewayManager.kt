@@ -47,6 +47,9 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 import me.lampu.lampcord.shared.api.AuthApi
+import me.lampu.lampcord.shared.api.DESKTOP_CLIENT_BUILD_NUMBER
+import me.lampu.lampcord.shared.api.DESKTOP_CLIENT_VERSION
+import me.lampu.lampcord.shared.api.MOBILE_CLIENT_BUILD_NUMBER
 import me.lampu.lampcord.shared.api.RestClient
 import me.lampu.lampcord.shared.model.Activity
 import me.lampu.lampcord.shared.model.buildUpdatePresencePayload
@@ -177,7 +180,7 @@ class GatewayManager(
                             "macos" -> "Macintosh; Intel Mac OS X 10_15_7"
                             else -> "X11; Linux x86_64"
                         }
-                        "Mozilla/5.0 ($browserOsName) AppleWebKit/537.36 (KHTML, like Gecko) discord/0.0.398 Chrome/138.0.7204.251 Electron/37.6.0 Safari/537.36"
+                        "Mozilla/5.0 ($browserOsName) AppleWebKit/537.36 (KHTML, like Gecko) discord/$DESKTOP_CLIENT_VERSION Chrome/138.0.7204.251 Electron/37.6.0 Safari/537.36"
                     }
                 }
 
@@ -548,14 +551,14 @@ class GatewayManager(
             }
             put("system_locale", JsonPrimitive("en-US"))
             put("has_client_mods", JsonPrimitive(false))
-            put("client_version", JsonPrimitive(if (isMobile) "341.0 - rn" else "0.0.309"))
+            put("client_version", JsonPrimitive(if (isMobile) "341.0 - rn" else DESKTOP_CLIENT_VERSION))
             put("release_channel", JsonPrimitive("stable"))
             put("device_vendor_id", JsonPrimitive(rest.vendorId))
             put("design_id", JsonPrimitive(if (isMobile) 2 else 0))
             put("browser_user_agent", JsonPrimitive(""))
             put("browser_version", JsonPrimitive(""))
             put("os_version", JsonPrimitive(getOsSdkVersion()))
-            put("client_build_number", JsonPrimitive(if (isMobile) 6081 else 309000))
+            put("client_build_number", JsonPrimitive(if (isMobile) MOBILE_CLIENT_BUILD_NUMBER else DESKTOP_CLIENT_BUILD_NUMBER))
             put("client_event_source", JsonNull)
             put("client_launch_id", JsonPrimitive(clientLaunchId))
             put("launch_signature", JsonPrimitive(launchSignature))
