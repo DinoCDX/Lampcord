@@ -48,9 +48,11 @@ import dev.nucleusframework.webview.jsbridge.rememberWebViewJsBridge
 import dev.nucleusframework.webview.web.WebView
 import dev.nucleusframework.webview.web.WebViewNavigator
 import dev.nucleusframework.webview.web.rememberWebViewNavigator
-import dev.nucleusframework.webview.web.rememberWebViewStateWithHTMLData
+import dev.nucleusframework.webview.web.LoadingState
+import dev.nucleusframework.webview.web.rememberWebViewState
 import io.ktor.http.encodeURLParameter
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
@@ -81,6 +83,7 @@ internal const val CAPTCHA_BRIDGE_METHOD = "lampcord.captcha"
 
 private const val CAPTCHA_CHROME_VERSION = "131.0.0.0"
 private const val HIDDEN_CARD_ALPHA = 0.02f
+private const val PAGE_SETTLE_MS = 600L
 
 private val REVEAL_KINDS = setOf(
     "error",
@@ -295,19 +298,27 @@ private fun CaptchaFrame(
     val colors = MaterialTheme.colorScheme
     val navigator = rememberWebViewNavigator()
     val bridge = rememberWebViewJsBridge(navigator)
+    val webViewState = rememberWebViewState(CAPTCHA_PAGE_URL) {
+        customUserAgentString = captchaUserAgent()
+        androidWebSettings.apply {
+            useWideViewPort = true
+            domStorageEnabled = true
+        }
+    }
 
     val isDark = background.luminance() < 0.5f
-    val pageHtml = remember(challenge, background) {
-        captchaPageHtml(
+    val script = remember(challenge, background) {
+        captchaInjectionScript(
             challenge = challenge,
             background = background.toCssHex(),
             theme = if (isDark) "dark" else "light",
         )
     }
-    val webViewState = rememberWebViewStateWithHTMLData(data = pageHtml, baseUrl = CAPTCHA_PAGE_URL)
 
-    var widgetReady by remember(pageHtml) { mutableStateOf(false) }
-    val events = remember(pageHtml) { Channel<CaptchaBridgeEvent>(Channel.UNLIMITED) }
+    val pageLoaded = webViewState.loadingState is LoadingState.Finished
+
+    var widgetReady by remember(script) { mutableStateOf(false) }
+    val events = remember(script) { Channel<CaptchaBridgeEvent>(Channel.UNLIMITED) }
     val handler = remember(events) { CaptchaBridgeHandler { events.trySend(it) } }
 
     DisposableEffect(bridge, handler) {
@@ -317,10 +328,12 @@ private fun CaptchaFrame(
 
     LaunchedEffect(webViewState) {
         webViewState.webSettings.isJavaScriptEnabled = true
-        webViewState.webSettings.customUserAgentString = captchaUserAgent()
-        webViewState.webSettings.androidWebSettings.apply {
-            useWideViewPort = true
-            domStorageEnabled = true
+    }
+
+    LaunchedEffect(pageLoaded, script) {
+        if (pageLoaded) {
+            delay(PAGE_SETTLE_MS)
+            navigator.evaluateJavaScript(script)
         }
     }
 
@@ -391,27 +404,6 @@ private fun captchaUserAgent(): String {
         "windows" -> "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) $chrome Safari/537.36"
         else -> "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) $chrome Safari/537.36"
     }
-}
-
-internal fun captchaPageHtml(
-    challenge: CaptchaChallenge,
-    background: String,
-    theme: String,
-): String {
-    val script = captchaInjectionScript(challenge, background, theme)
-    return """<!doctype html>
-<html>
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-</head>
-<body style="margin:0;background:$background">
-<script>
-$script
-</script>
-</body>
-</html>
-"""
 }
 
 internal fun captchaInjectionScript(
@@ -502,6 +494,7 @@ internal fun captchaInjectionScript(
   overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:100000;' +
     'display:flex;align-items:center;justify-content:center;background:' + $bg + ';';
   var box = doc.createElement('div');
+  box.id = 'lampcord-captcha-box';
   box.style.cssText = 'max-width:100%;';
   overlay.appendChild(box);
   doc.documentElement.appendChild(overlay);
@@ -592,7 +585,8 @@ private const val HCAPTCHA_SERVICE_JS = """
     if (rendered || !window.hcaptcha || Date.now() < renderRetryAt) { return; }
     rendered = true;
     renderTries++;
-    send('rendering', 'sitekey_len=' + String(SITEKEY).length + ' invisible=' + INVISIBLE + ' box_connected=' + box.isConnected + ' render_type=' + typeof hcaptcha.render);
+    var container = renderTries % 2 === 1 ? box : 'lampcord-captcha-box';
+    send('rendering', 'sitekey_len=' + String(SITEKEY).length + ' invisible=' + INVISIBLE + ' box_connected=' + box.isConnected + ' container=' + (container === box ? 'element' : 'id') + ' attempt=' + renderTries);
     var opts = {
       sitekey: SITEKEY,
       theme: THEME,
@@ -605,7 +599,7 @@ private const val HCAPTCHA_SERVICE_JS = """
     };
     if (INVISIBLE) { opts.size = 'invisible'; }
     try {
-      widgetId = hcaptcha.render(box, opts);
+      widgetId = hcaptcha.render(container, opts);
     } catch (e) {
       send('render-exception', errorText(e));
       return;
