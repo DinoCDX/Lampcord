@@ -16,6 +16,7 @@ on:
       - 'shared/**'
       - 'androidApp/**'
       - 'native/**'
+      - 'rust/**'
   pull_request:
     branches: [ main ]
     paths:
@@ -31,6 +32,7 @@ on:
       - 'shared/**'
       - 'androidApp/**'
       - 'native/**'
+      - 'rust/**'
 
 concurrency:
   group: android-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}

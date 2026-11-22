@@ -67,7 +67,7 @@ jobs:
               [[ -z "$f" ]] && continue
 
               case "$f" in
-                androidApp/**|shared/androidMain/**|shared/src/androidMain/**|shared/jvmSharedMain/**|shared/src/jvmSharedMain/**|native/**)
+                androidApp/**|shared/androidMain/**|shared/src/androidMain/**|shared/jvmSharedMain/**|shared/src/jvmSharedMain/**|native/**|rust/**)
                   android_changed=true
                   ;;
               esac
