@@ -194,6 +194,9 @@ kotlin {
                 implementation(libs.coil.gif)
 
                 implementation(libs.androidx.navigation3.ui)
+
+                // UniFFI bindings call through JNA; Android needs the aar that ships libjnidispatch.
+                implementation("net.java.dev.jna:jna:${libs.versions.jna.get()}@aar")
             }
         }
 
