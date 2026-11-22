@@ -156,7 +156,22 @@ data class RustSnapshot(
     val readStates: List<RustReadState>,
     val auth: RustAuthState,
     val error: String?,
+    val memberList: RustMemberList = RustMemberList(),
     val versions: RustSnapshotVersions = RustSnapshotVersions(),
+)
+
+/** One visible member-list row. [kind]: 0 = pending, 1 = group header, 2 = member. */
+data class RustMemberListRow(
+    val kind: Int,
+    val groupId: String? = null,
+    val groupCount: Int? = null,
+    val member: RustMember? = null,
+)
+
+data class RustMemberList(
+    val rows: List<RustMemberListRow> = emptyList(),
+    val onlineCount: Int? = null,
+    val memberCount: Int? = null,
 )
 
 enum class RustErrorKind {

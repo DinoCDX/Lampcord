@@ -4,6 +4,8 @@ import me.lampu.lampcord.shared.model.Activity
 import me.lampu.lampcord.shared.model.Channel
 import me.lampu.lampcord.shared.model.Guild
 import me.lampu.lampcord.shared.model.Member
+import me.lampu.lampcord.shared.model.MemberListGroup
+import me.lampu.lampcord.shared.model.MemberListListItem
 import me.lampu.lampcord.shared.model.Message
 import me.lampu.lampcord.shared.model.PresenceUpdate
 import me.lampu.lampcord.shared.model.User
@@ -70,28 +72,43 @@ object RustSnapshotMapper {
             .mapNotNull { state -> state.lastMessageId?.let { state.channelId.toString() to it.toString() } }
             .toMap()
 
+    /** The guild's member list rows in Discord order; null marks a row not yet received. */
+    fun mapMemberListItems(snapshot: RustSnapshot): List<MemberListListItem?> =
+        snapshot.memberList.rows.map { row ->
+            when (row.kind) {
+                ROW_GROUP -> MemberListListItem(
+                    group = MemberListGroup(id = row.groupId.orEmpty(), count = row.groupCount),
+                )
+                ROW_MEMBER -> row.member?.let { MemberListListItem(member = toMember(it)) }
+                else -> null
+            }
+        }
+
+    private fun toMember(member: RustMember): Member = Member(
+        user = User(
+            id = member.userId.toString(),
+            username = member.username,
+            avatar = member.avatar,
+        ),
+        nick = member.nickname,
+        avatar = member.avatar,
+        roles = member.roles.map(ULong::toString),
+        presence = member.status?.let { status ->
+            PresenceUpdate(
+                user = User(id = member.userId.toString()),
+                status = status,
+            )
+        },
+    )
+
+    private const val ROW_GROUP = 1
+    private const val ROW_MEMBER = 2
+
     private fun mapMemberValues(members: List<RustMember>): Map<String, List<Pair<String, Member>>> =
         members
             .groupBy { it.guildId.toString() }
             .mapValues { (_, members) ->
-                members.map { member ->
-                    member.userId.toString() to Member(
-                        user = User(
-                            id = member.userId.toString(),
-                            username = member.username,
-                            avatar = member.avatar,
-                        ),
-                        nick = member.nickname,
-                        avatar = member.avatar,
-                        roles = member.roles.map(ULong::toString),
-                        presence = member.status?.let { status ->
-                            PresenceUpdate(
-                                user = User(id = member.userId.toString()),
-                                status = status,
-                            )
-                        },
-                    )
-                }
+                members.map { member -> member.userId.toString() to toMember(member) }
             }
 
     private fun mapPresence(presence: RustPresence): PresenceUpdate = PresenceUpdate(

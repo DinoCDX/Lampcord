@@ -15,6 +15,7 @@ import kotlinx.coroutines.launch
 import me.lampu.lampcord.shared.model.PresenceUpdate
 import me.lampu.lampcord.shared.model.User
 import me.lampu.lampcord.shared.state.EntityStore
+import me.lampu.lampcord.shared.state.MemberListStore
 import me.lampu.lampcord.shared.state.GuildStore
 import me.lampu.lampcord.shared.state.MessageStore
 import me.lampu.lampcord.shared.state.NavigationStore
@@ -34,6 +35,7 @@ class RustCoreIntegration(
     private val userStore: UserStore,
     private val presenceStore: PresenceStore,
     private val readStateStore: ReadStateStore,
+    private val memberListStore: MemberListStore,
 ) : AutoCloseable {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var job: Job? = null
@@ -46,6 +48,7 @@ class RustCoreIntegration(
         if (job != null) return
         RustCoreMode.requireEnabled("store injection")
         ownership = RustCoreWriteGuard.claim("RustCoreIntegration")
+        memberListStore.rustRangeRequester = { ranges -> engine.setMemberListRanges(ranges) }
         lastInjectedVersions = RustSnapshotVersions()
         lastInjectedSnapshot = null
 
@@ -142,6 +145,12 @@ class RustCoreIntegration(
                 RustSnapshotMapper.mapChangedMembers(previous, snapshot)
             }
             members.forEach { (guildId, guildMembers) -> userStore.cacheMembers(guildId, guildMembers) }
+            memberListStore.applyRustMemberList(
+                guildId = snapshot.selectedGuildId?.toString(),
+                items = RustSnapshotMapper.mapMemberListItems(snapshot),
+                online = snapshot.memberList.onlineCount,
+                members = snapshot.memberList.memberCount,
+            )
         }
         if (presencesChanged) {
             val presences = if (previous == null) {
@@ -267,6 +276,7 @@ class RustCoreIntegration(
     }
 
     override fun close() {
+        memberListStore.rustRangeRequester = null
         job?.cancel()
         job = null
         ownership?.close()

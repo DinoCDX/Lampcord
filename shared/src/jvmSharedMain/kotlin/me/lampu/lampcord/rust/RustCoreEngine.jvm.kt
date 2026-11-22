@@ -28,6 +28,8 @@ import uniffi.lampcord_ffi.ConnectionState as FfiConnectionState
 import uniffi.lampcord_ffi.FfiErrorKind as FfiErrorKind
 import uniffi.lampcord_ffi.GuildSnapshot as FfiGuildSnapshot
 import uniffi.lampcord_ffi.LampcordClient
+import uniffi.lampcord_ffi.MemberListRowSnapshot as FfiMemberListRowSnapshot
+import uniffi.lampcord_ffi.MemberListSnapshot as FfiMemberListSnapshot
 import uniffi.lampcord_ffi.MemberSnapshot as FfiMemberSnapshot
 import uniffi.lampcord_ffi.MessageSnapshot as FfiMessageSnapshot
 import uniffi.lampcord_ffi.PresenceSnapshot as FfiPresenceSnapshot
@@ -111,6 +113,8 @@ actual class RustCoreEngine actual constructor(config: RustClientConfig) : AutoC
     actual fun cancelRemoteAuth(): Boolean = runCatching { client.cancelRemoteAuth() }.isSuccess
 
     actual fun selectGuild(guildId: ULong?): Boolean = runCatching { client.selectGuild(guildId) }.isSuccess
+    actual fun setMemberListRanges(ranges: List<List<Int>>): Boolean =
+        runCatching { client.setMemberListRanges(ranges.map { range -> range.map(Int::toUInt) }) }.isSuccess
     actual fun selectChannel(channelId: ULong?): Boolean = runCatching { client.selectChannel(channelId) }.isSuccess
 
     actual fun fetchMessages(channelId: ULong, before: ULong?, limit: UByte?): Boolean =
@@ -236,6 +240,19 @@ private fun mapMember(value: FfiMemberSnapshot): RustMember = RustMember(
     status = value.status,
 )
 
+private fun mapMemberListRow(value: FfiMemberListRowSnapshot): RustMemberListRow = RustMemberListRow(
+    kind = value.kind.toInt(),
+    groupId = value.groupId,
+    groupCount = value.groupCount?.toInt(),
+    member = value.member?.let(::mapMember),
+)
+
+private fun mapMemberList(value: FfiMemberListSnapshot): RustMemberList = RustMemberList(
+    rows = value.rows.map(::mapMemberListRow),
+    onlineCount = value.onlineCount?.toInt(),
+    memberCount = value.memberCount?.toInt(),
+)
+
 private fun mapPresence(value: FfiPresenceSnapshot): RustPresence =
     RustPresence(value.userId, value.status, value.activities)
 
@@ -287,6 +304,7 @@ private fun mapSnapshot(
     members = value.members.map(::mapMember),
     presences = value.presences.map(::mapPresence),
     readStates = value.readStates.map(::mapReadState),
+    memberList = mapMemberList(value.memberList),
     auth = mapAuthState(value.auth),
     error = value.error,
     versions = mapVersions(versions),
@@ -309,6 +327,7 @@ private fun mapSnapshotPatch(value: FfiSnapshotPatch, previous: RustSnapshot): R
         members = value.members?.map(::mapMember) ?: previous.members,
         presences = value.presences?.map(::mapPresence) ?: previous.presences,
         readStates = value.readStates?.map(::mapReadState) ?: previous.readStates,
+        memberList = value.memberList?.let(::mapMemberList) ?: previous.memberList,
         auth = meta?.auth ?: previous.auth,
         error = meta?.error ?: previous.error,
         versions = mapVersions(value.versions),

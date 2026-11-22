@@ -20,7 +20,7 @@ use lampcord_core::{
     rest::RestConfig,
     rest_client::RestClient,
     secret_store::{FileSecretStore, SecretStore},
-    state_cache::{CachedPresence, StateCache},
+    state_cache::{CachedPresence, MemberListRow, StateCache},
     token_store::{SavedAccount, TokenStore},
     traits::{CaptchaSolver, GatewayUrlProvider},
 };
@@ -33,9 +33,10 @@ use crate::{
     error::FfiErrorKind,
     snapshot::{
         AuthStateSnapshot, ChannelSnapshot, ClientSnapshot, GuildSnapshot, MAX_SNAPSHOT_MEMBERS,
-        MAX_SNAPSHOT_PRESENCES, MAX_SNAPSHOT_READ_STATES, MemberSnapshot, MessageSnapshot,
-        PresenceSnapshot, ReadStateSnapshot, SNAPSHOT_SCHEMA_VERSION, SnapshotMetaPatch,
-        SnapshotPatch, SnapshotVersions,
+        MAX_SNAPSHOT_PRESENCES, MAX_SNAPSHOT_READ_STATES, MEMBER_LIST_ROW_GROUP,
+        MEMBER_LIST_ROW_MEMBER, MEMBER_LIST_ROW_PENDING, MemberListRowSnapshot, MemberListSnapshot,
+        MemberSnapshot, MessageSnapshot, PresenceSnapshot, ReadStateSnapshot,
+        SNAPSHOT_SCHEMA_VERSION, SnapshotMetaPatch, SnapshotPatch, SnapshotVersions,
     },
     types::{
         AuthChallenge, AuthFailureKind, ClientCommand, ClientConfig, ClientEvent,
@@ -280,6 +281,7 @@ impl RuntimeHandle {
             presences: (versions.presences > since.presences).then(|| snapshot.presences.clone()),
             read_states: (versions.read_states > since.read_states)
                 .then(|| snapshot.read_states.clone()),
+            member_list: (versions.members > since.members).then(|| snapshot.member_list.clone()),
         }
     }
 
@@ -526,7 +528,8 @@ fn set_snapshot(
     let guilds_changed = previous.guilds != next.guilds;
     let channels_changed = previous.channels != next.channels;
     let messages_changed = previous.messages != next.messages;
-    let members_changed = previous.members != next.members;
+    let members_changed =
+        previous.members != next.members || previous.member_list != next.member_list;
     let presences_changed = previous.presences != next.presences;
     let read_states_changed = previous.read_states != next.read_states;
     if meta_changed {
@@ -685,6 +688,16 @@ fn subscribe_guild_members(
     cache: &Option<Arc<Mutex<StateCache>>>,
     outbound: &Option<mpsc::UnboundedSender<Value>>,
 ) {
+    request_member_list_ranges(guild_id, &[[0, 99]], cache, outbound);
+}
+
+/// Requests the given inclusive row ranges of a guild's member list (opcode 14).
+fn request_member_list_ranges(
+    guild_id: Snowflake,
+    ranges: &[[u32; 2]],
+    cache: &Option<Arc<Mutex<StateCache>>>,
+    outbound: &Option<mpsc::UnboundedSender<Value>>,
+) {
     let (Some(cache), Some(outbound)) = (cache, outbound) else {
         return;
     };
@@ -697,7 +710,60 @@ fn subscribe_guild_members(
             .map(|channel| channel.id)
     };
     if let Some(channel_id) = channel_id {
-        let _ = outbound.send(lazy_request_payload(guild_id, channel_id, &[[0, 99]]));
+        let _ = outbound.send(lazy_request_payload(guild_id, channel_id, ranges));
+    }
+}
+
+/// Snapshot of the selected guild's member list rows, resolved to member data.
+fn member_list_snapshot(cache: &StateCache, guild_id: Option<Snowflake>) -> MemberListSnapshot {
+    let Some(guild_id) = guild_id else {
+        return MemberListSnapshot::default();
+    };
+    let Some(state) = cache.member_list(guild_id) else {
+        return MemberListSnapshot::default();
+    };
+    let rows = state
+        .rows
+        .iter()
+        .map(|row| match row {
+            MemberListRow::Pending => pending_row(),
+            MemberListRow::Group { id, count } => MemberListRowSnapshot {
+                kind: MEMBER_LIST_ROW_GROUP,
+                group_id: Some(id.clone()),
+                group_count: *count,
+                member: None,
+            },
+            MemberListRow::Member(user_id) => match cache.member(guild_id, *user_id) {
+                Some(member) => MemberListRowSnapshot {
+                    kind: MEMBER_LIST_ROW_MEMBER,
+                    member: Some(MemberSnapshot {
+                        guild_id,
+                        user_id: *user_id,
+                        username: member.username.clone(),
+                        avatar: member.avatar.clone(),
+                        nickname: member.nickname.clone(),
+                        roles: member.roles.clone(),
+                        status: cache
+                            .presence(*user_id)
+                            .map(|presence| presence.status.clone()),
+                    }),
+                    ..MemberListRowSnapshot::default()
+                },
+                None => pending_row(),
+            },
+        })
+        .collect();
+    MemberListSnapshot {
+        rows,
+        online_count: state.online_count,
+        member_count: state.member_count,
+    }
+}
+
+fn pending_row() -> MemberListRowSnapshot {
+    MemberListRowSnapshot {
+        kind: MEMBER_LIST_ROW_PENDING,
+        ..MemberListRowSnapshot::default()
     }
 }
 
@@ -878,6 +944,7 @@ fn build_snapshot(
         members,
         presences,
         read_states,
+        member_list: member_list_snapshot(&cache, selected_guild_id),
         auth: auth.clone(),
         error,
     }
@@ -1449,6 +1516,18 @@ async fn run(
                             subscribe_guild_members(guild_id, &cache, &gateway_outbound);
                         }
                         mark_snapshot_dirty!();
+                    }
+                    ClientCommand::SetMemberListRanges { ranges } => {
+                        if let Some(guild_id) = selected_guild_id {
+                            let pairs: Vec<[u32; 2]> = ranges
+                                .iter()
+                                .filter_map(|range| match range.as_slice() {
+                                    [start, end] => Some([*start, *end]),
+                                    _ => None,
+                                })
+                                .collect();
+                            request_member_list_ranges(guild_id, &pairs, &cache, &gateway_outbound);
+                        }
                     }
                     ClientCommand::SelectChannel { channel_id } => {
                         selected_channel_id = channel_id.map(Snowflake::from);

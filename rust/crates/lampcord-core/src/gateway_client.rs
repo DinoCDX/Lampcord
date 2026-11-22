@@ -1,8 +1,8 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use serde_json::{Value, json};
 use lampcord_model::snowflake::Snowflake;
+use serde_json::{Value, json};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use crate::{
@@ -743,7 +743,8 @@ mod tests {
         transport.push(hello(41_250));
         transport.push_close(1000);
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
-        tx.send(lazy_request_payload(10, 11, &[[0, 99]])).expect("queue");
+        tx.send(lazy_request_payload(10, 11, &[[0, 99]]))
+            .expect("queue");
         let mut client = GatewayClient::new(transport, StaticUrl).with_outbound(rx);
 
         client.run("token-1").await.expect("gateway run");

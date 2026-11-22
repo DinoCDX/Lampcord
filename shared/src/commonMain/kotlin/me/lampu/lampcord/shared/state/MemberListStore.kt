@@ -67,7 +67,30 @@ class MemberListStore(
         lastRanges = emptyList()
     }
 
+    /** Set by the Rust core bridge; range requests then go to the core instead of the Kotlin gateway. */
+    var rustRangeRequester: ((List<List<Int>>) -> Unit)? = null
+
+    /** Replaces the list with the rows the Rust core reports for the selected guild. */
+    fun applyRustMemberList(guildId: String?, items: List<MemberListListItem?>, online: Int?, members: Int?) {
+        Snapshot.withMutableSnapshot {
+            memberListItems.clear()
+            memberListItems.addAll(items)
+            memberListGroups.clear()
+            items.forEach { item -> item?.group?.let { memberListGroups[it.id] = it } }
+            onlineCount = online
+            memberCount = members
+            if (guildId != null) {
+                online?.let { guildOnlineCounts[guildId] = it }
+                members?.let { guildMemberCounts[guildId] = it }
+            }
+        }
+    }
+
     fun requestMemberListRange(ranges: List<List<Int>>) {
+        if (RustCoreMode.enabled) {
+            rustRangeRequester?.invoke(ranges)
+            return
+        }
         val guild = selectionStore.selectedGuild ?: return
         val thread = selectionStore.selectedThread
         val channel = selectionStore.selectedChannel ?: return

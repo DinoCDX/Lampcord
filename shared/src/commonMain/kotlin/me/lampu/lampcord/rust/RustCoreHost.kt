@@ -6,6 +6,7 @@ import org.koin.compose.koinInject
 import me.lampu.lampcord.shared.settings.Settings
 import me.lampu.lampcord.shared.state.EntityStore
 import me.lampu.lampcord.shared.state.GuildStore
+import me.lampu.lampcord.shared.state.MemberListStore
 import me.lampu.lampcord.shared.state.MessageStore
 import me.lampu.lampcord.shared.state.NavigationStore
 import me.lampu.lampcord.shared.state.PresenceStore
@@ -29,9 +30,15 @@ fun RustCoreHost() {
     val userStore: UserStore = koinInject()
     val presenceStore: PresenceStore = koinInject()
     val readStateStore: ReadStateStore = koinInject()
+    val memberListStore: MemberListStore = koinInject()
 
     DisposableEffect(sessionManager) {
-        val engine = runCatching { RustCoreEngine(RustClientConfig()) }.getOrNull()
+        val engine = try {
+            RustCoreEngine(RustClientConfig())
+        } catch (error: Throwable) {
+            Logging.e("RustCore", "RustCoreEngine init failed", error)
+            null
+        }
         val token = Settings.shared.discordToken.trim().takeIf { it.isNotBlank() }
         if (engine == null) {
             Logging.w("RustCore", "Failed to start RustCoreEngine; falling back to Kotlin gateway")
@@ -49,6 +56,7 @@ fun RustCoreHost() {
                 userStore,
                 presenceStore,
                 readStateStore,
+                memberListStore,
             )
             integration.start()
             if (token != null) engine.connectToken(token)

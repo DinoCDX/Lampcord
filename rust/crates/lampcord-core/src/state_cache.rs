@@ -40,6 +40,26 @@ const HANDLED_EVENTS: &[&str] = &[
     "USER_SETTINGS_UPDATE",
 ];
 
+/// One row of a guild member list, in the order Discord sends it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MemberListRow {
+    /// Not received yet (or invalidated by the gateway).
+    Pending,
+    /// Section header such as "online" or a role, with its member count when known.
+    Group {
+        id: String,
+        count: Option<u32>,
+    },
+    Member(Snowflake),
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct MemberListState {
+    pub rows: Vec<MemberListRow>,
+    pub online_count: Option<u32>,
+    pub member_count: Option<u32>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CachedMember {
     pub guild_id: Snowflake,
@@ -97,9 +117,8 @@ pub struct StateCache {
     read_state: ReadStateStore,
     /// Preferred rail order from user settings (folders first, then positions).
     guild_order_hint: Vec<Snowflake>,
-    /// Per-guild positional member list rows built from GUILD_MEMBER_LIST_UPDATE.
-    /// `None` marks a group header or an unfilled row.
-    member_list_rows: HashMap<Snowflake, Vec<Option<Snowflake>>>,
+    /// Per-guild member list built from GUILD_MEMBER_LIST_UPDATE, in Discord's row order.
+    member_lists: HashMap<Snowflake, MemberListState>,
 }
 
 impl StateCache {
@@ -215,6 +234,10 @@ impl StateCache {
             .get(&channel_id)
             .map(Vec::as_slice)
             .unwrap_or_default()
+    }
+
+    pub fn member_list(&self, guild_id: Snowflake) -> Option<&MemberListState> {
+        self.member_lists.get(&guild_id)
     }
 
     pub fn member(&self, guild_id: Snowflake, user_id: Snowflake) -> Option<&CachedMember> {
@@ -335,7 +358,7 @@ impl StateCache {
 
         self.private_channel_ids.clear();
         // A READY starts a fresh session: positional rows from the old session are stale.
-        self.member_list_rows.clear();
+        self.member_lists.clear();
         for key in ["channels", "private_channels"] {
             if let Some(channels) = data.get(key).and_then(Value::as_array) {
                 for value in channels {
@@ -767,42 +790,60 @@ impl StateCache {
 
     fn handle_member_list_update(&mut self, data: Option<&Value>) -> Result<(), CacheError> {
         let data = data.ok_or(CacheError::MissingData("GUILD_MEMBER_LIST_UPDATE"))?;
-        let guild_id = snowflake(data.get("guild_id"))
-            .ok_or(CacheError::MissingData("guild_id in GUILD_MEMBER_LIST_UPDATE"))?;
-        let ops = data.get("ops").and_then(Value::as_array).cloned().unwrap_or_default();
+        let guild_id = snowflake(data.get("guild_id")).ok_or(CacheError::MissingData(
+            "guild_id in GUILD_MEMBER_LIST_UPDATE",
+        ))?;
+        let ops = data
+            .get("ops")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
 
-        // Take the rows out so member caching below can borrow `self` freely.
-        let mut rows = self.member_list_rows.remove(&guild_id).unwrap_or_default();
+        // Take the state out so member caching below can borrow `self` freely.
+        let mut state = self.member_lists.remove(&guild_id).unwrap_or_default();
+        if let Some(count) = u32_of(data.get("online_count")) {
+            state.online_count = Some(count);
+        }
+        if let Some(count) = u32_of(data.get("member_count")) {
+            state.member_count = Some(count);
+        }
+        let rows = &mut state.rows;
         for op in &ops {
             match op.get("op").and_then(Value::as_str).unwrap_or_default() {
                 "SYNC" => {
                     let Some((start, _end)) = index_pair(op.get("range")) else {
                         continue;
                     };
-                    let items = op.get("items").and_then(Value::as_array).cloned().unwrap_or_default();
+                    let items = op
+                        .get("items")
+                        .and_then(Value::as_array)
+                        .cloned()
+                        .unwrap_or_default();
                     if rows.len() < start + items.len() {
-                        rows.resize(start + items.len(), None);
+                        rows.resize(start + items.len(), MemberListRow::Pending);
                     }
                     for (offset, item) in items.iter().enumerate() {
                         rows[start + offset] = self.cache_list_item(guild_id, item);
                     }
                 }
                 "INSERT" => {
-                    let (Some(index), Some(item)) = (index_of(op.get("index")), op.get("item")) else {
+                    let (Some(index), Some(item)) = (index_of(op.get("index")), op.get("item"))
+                    else {
                         continue;
                     };
-                    let cached = self.cache_list_item(guild_id, item);
+                    let row = self.cache_list_item(guild_id, item);
                     if index <= rows.len() {
-                        rows.insert(index, cached);
+                        rows.insert(index, row);
                     }
                 }
                 "UPDATE" => {
-                    let (Some(index), Some(item)) = (index_of(op.get("index")), op.get("item")) else {
+                    let (Some(index), Some(item)) = (index_of(op.get("index")), op.get("item"))
+                    else {
                         continue;
                     };
-                    let cached = self.cache_list_item(guild_id, item);
+                    let row = self.cache_list_item(guild_id, item);
                     if index < rows.len() {
-                        rows[index] = cached;
+                        rows[index] = row;
                     }
                 }
                 "DELETE" => {
@@ -810,7 +851,7 @@ impl StateCache {
                         continue;
                     };
                     if index < rows.len() {
-                        if let Some(Some(user_id)) = rows.get(index).copied() {
+                        if let MemberListRow::Member(user_id) = rows[index] {
                             if let Some(members) = self.members.get_mut(&guild_id) {
                                 members.remove(&user_id);
                             }
@@ -824,25 +865,39 @@ impl StateCache {
                     };
                     let end = end.min(rows.len().saturating_sub(1));
                     for row in rows.iter_mut().take(end + 1).skip(start) {
-                        *row = None;
+                        *row = MemberListRow::Pending;
                     }
                 }
                 _ => {}
             }
         }
-        self.member_list_rows.insert(guild_id, rows);
+        self.member_lists.insert(guild_id, state);
         Ok(())
     }
 
-    /// Caches a member-list row. Returns the user id for member rows, `None` for group headers.
-    fn cache_list_item(&mut self, guild_id: Snowflake, item: &Value) -> Option<Snowflake> {
-        let member = item.get("member")?;
-        let user_id = snowflake(
+    /// Caches one member-list item and returns the row it occupies.
+    fn cache_list_item(&mut self, guild_id: Snowflake, item: &Value) -> MemberListRow {
+        if let Some(group) = item.get("group") {
+            return MemberListRow::Group {
+                id: group
+                    .get("id")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_owned(),
+                count: u32_of(group.get("count")),
+            };
+        }
+        let Some(member) = item.get("member") else {
+            return MemberListRow::Pending;
+        };
+        let Some(user_id) = snowflake(
             member
                 .get("user")
                 .and_then(|user| user.get("id"))
                 .or_else(|| member.get("user_id")),
-        )?;
+        ) else {
+            return MemberListRow::Pending;
+        };
         self.cache_member_value(guild_id, member);
         if let Some(presence) = member.get("presence").and_then(Value::as_object) {
             let mut presence = presence.clone();
@@ -851,7 +906,7 @@ impl StateCache {
                 .or_insert_with(|| serde_json::json!({ "id": user_id.to_string() }));
             self.cache_presence_value(&Value::Object(presence));
         }
-        Some(user_id)
+        MemberListRow::Member(user_id)
     }
 
     fn handle_member_chunk(&mut self, data: Option<&Value>) -> Result<(), CacheError> {
@@ -897,7 +952,7 @@ impl StateCache {
         self.guilds.clear();
         self.guild_order.clear();
         self.guild_order_hint.clear();
-        self.member_list_rows.clear();
+        self.member_lists.clear();
         self.channels.clear();
         self.guild_channels.clear();
         self.private_channel_ids.clear();
@@ -983,6 +1038,10 @@ fn guild_order_from_settings(settings: &Value) -> Vec<Snowflake> {
         .and_then(Value::as_array)
         .map(|ids| ids.iter().filter_map(|id| snowflake(Some(id))).collect())
         .unwrap_or_default()
+}
+
+fn u32_of(value: Option<&Value>) -> Option<u32> {
+    value?.as_u64().and_then(|value| u32::try_from(value).ok())
 }
 
 fn index_of(value: Option<&Value>) -> Option<usize> {
@@ -1350,7 +1409,10 @@ mod ordering_and_members_tests {
             )
             .expect("ready");
         cache
-            .handle_event("USER_SETTINGS_UPDATE", Some(&json!({"guild_positions": ["20", "10"]})))
+            .handle_event(
+                "USER_SETTINGS_UPDATE",
+                Some(&json!({"guild_positions": ["20", "10"]})),
+            )
             .expect("settings");
         let ids: Vec<u64> = cache.ordered_guilds().iter().map(|g| g.id).collect();
         assert_eq!(ids, vec![20, 10]);
@@ -1385,7 +1447,10 @@ mod ordering_and_members_tests {
     fn member_list_sync_insert_update_delete_track_members() {
         let mut cache = StateCache::new();
         cache
-            .handle_event("READY", Some(&json!({"user": {"id": "1", "username": "me"}, "guilds": [guild(10)]})))
+            .handle_event(
+                "READY",
+                Some(&json!({"user": {"id": "1", "username": "me"}, "guilds": [guild(10)]})),
+            )
             .expect("ready");
         let member = |id: u64, name: &str| {
             json!({"member": {"user": {"id": id.to_string(), "username": name}, "roles": [],
@@ -1441,6 +1506,44 @@ mod ordering_and_members_tests {
         assert_eq!(dms.len(), 1);
         assert_eq!(dms[0].id, 900);
         assert_eq!(dms[0].recipients[0].global_name.as_deref(), Some("Bob"));
+    }
+
+    #[test]
+    fn member_list_rows_keep_groups_members_and_counts() {
+        let mut cache = StateCache::new();
+        cache
+            .handle_event(
+                "READY",
+                Some(&json!({"user": {"id": "1", "username": "me"}, "guilds": [guild(10)]})),
+            )
+            .expect("ready");
+        cache
+            .handle_event(
+                "GUILD_MEMBER_LIST_UPDATE",
+                Some(&json!({
+                    "guild_id": "10", "online_count": 3, "member_count": 9,
+                    "ops": [{"op": "SYNC", "range": [0, 2], "items": [
+                        {"group": {"id": "online", "count": 3}},
+                        {"member": {"user": {"id": "5", "username": "eve"}, "roles": []}},
+                        {"member": {"user": {"id": "6", "username": "fox"}, "roles": []}}
+                    ]}]
+                })),
+            )
+            .expect("sync");
+        let state = cache.member_list(10).expect("member list");
+        assert_eq!(state.online_count, Some(3));
+        assert_eq!(state.member_count, Some(9));
+        assert_eq!(
+            state.rows,
+            vec![
+                MemberListRow::Group {
+                    id: "online".to_owned(),
+                    count: Some(3)
+                },
+                MemberListRow::Member(5),
+                MemberListRow::Member(6),
+            ]
+        );
     }
 
     #[test]

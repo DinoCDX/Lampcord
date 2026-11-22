@@ -154,6 +154,10 @@ impl LampcordClient {
         self.send(ClientCommand::SelectChannel { channel_id })
     }
 
+    pub fn set_member_list_ranges(&self, ranges: Vec<Vec<u32>>) -> Result<(), FfiClientError> {
+        self.send(ClientCommand::SetMemberListRanges { ranges })
+    }
+
     pub fn fetch_messages(
         &self,
         channel_id: u64,

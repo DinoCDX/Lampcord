@@ -25,6 +25,7 @@ pub struct ClientSnapshot {
     pub members: Vec<MemberSnapshot>,
     pub presences: Vec<PresenceSnapshot>,
     pub read_states: Vec<ReadStateSnapshot>,
+    pub member_list: MemberListSnapshot,
     pub auth: AuthStateSnapshot,
     pub error: Option<String>,
 }
@@ -68,6 +69,7 @@ pub struct SnapshotPatch {
     pub members: Option<Vec<MemberSnapshot>>,
     pub presences: Option<Vec<PresenceSnapshot>>,
     pub read_states: Option<Vec<ReadStateSnapshot>>,
+    pub member_list: Option<MemberListSnapshot>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -118,6 +120,28 @@ pub struct MemberSnapshot {
     pub nickname: Option<String>,
     pub roles: Vec<u64>,
     pub status: Option<String>,
+}
+
+/// Row kinds in `MemberListRowSnapshot::kind`.
+pub const MEMBER_LIST_ROW_PENDING: u8 = 0;
+pub const MEMBER_LIST_ROW_GROUP: u8 = 1;
+pub const MEMBER_LIST_ROW_MEMBER: u8 = 2;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct MemberListRowSnapshot {
+    pub kind: u8,
+    pub group_id: Option<String>,
+    pub group_count: Option<u32>,
+    pub member: Option<MemberSnapshot>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct MemberListSnapshot {
+    pub rows: Vec<MemberListRowSnapshot>,
+    pub online_count: Option<u32>,
+    pub member_count: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
