@@ -59,7 +59,9 @@ fun RustCoreHost() {
                 memberListStore,
             )
             integration.start()
-            if (token != null) engine.connectToken(token)
+            // The Kotlin gateway saves its token in Settings.discordToken, but the Rust core keeps
+            // its own token in the secret store. Without a token in settings, reconnect with the stored one.
+            if (token != null) engine.connectToken(token) else engine.connectStoredToken()
             onDispose {
                 integration.close()
                 engine.close()

@@ -254,7 +254,8 @@ fun main() {
                             )
                             integration.start()
                             val token = Settings.shared.discordToken.trim().takeIf { it.isNotBlank() }
-                            if (token != null) engine.connectToken(token)
+                            // Same as RustCoreHost: fall back to the token the Rust core stored itself.
+                            if (token != null) engine.connectToken(token) else engine.connectStoredToken()
                             onDispose {
                                 rustEngine = null
                                 integration.close()
