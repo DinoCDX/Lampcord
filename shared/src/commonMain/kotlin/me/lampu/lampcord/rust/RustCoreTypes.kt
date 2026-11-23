@@ -81,6 +81,15 @@ data class RustChannel(
     val parentId: ULong?,
     val position: Int?,
     val canView: Boolean = true,
+    val icon: String? = null,
+    val recipients: List<RustRecipient> = emptyList(),
+)
+
+data class RustRecipient(
+    val id: ULong,
+    val username: String,
+    val globalName: String?,
+    val avatar: String?,
 )
 
 data class RustMessage(
@@ -91,6 +100,7 @@ data class RustMessage(
     val content: String,
     val timestamp: String,
     val editedTimestamp: String?,
+    val authorAvatar: String? = null,
 )
 
 data class RustMember(

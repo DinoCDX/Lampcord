@@ -97,6 +97,17 @@ pub struct ChannelSnapshot {
     pub parent_id: Option<u64>,
     pub position: Option<i32>,
     pub can_view: bool,
+    pub icon: Option<String>,
+    pub recipients: Vec<RecipientSnapshot>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct RecipientSnapshot {
+    pub id: u64,
+    pub username: String,
+    pub global_name: Option<String>,
+    pub avatar: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -106,6 +117,7 @@ pub struct MessageSnapshot {
     pub channel_id: u64,
     pub author_id: Option<u64>,
     pub author_name: String,
+    pub author_avatar: Option<String>,
     pub content: String,
     pub timestamp: String,
     pub edited_timestamp: Option<String>,

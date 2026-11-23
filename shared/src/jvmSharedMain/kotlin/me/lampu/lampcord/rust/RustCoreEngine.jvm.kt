@@ -226,6 +226,15 @@ private fun mapChannel(value: FfiChannelSnapshot): RustChannel = RustChannel(
     parentId = value.parentId,
     position = value.position,
     canView = value.canView,
+    icon = value.icon,
+    recipients = value.recipients.map { recipient ->
+        RustRecipient(
+            id = recipient.id,
+            username = recipient.username,
+            globalName = recipient.globalName,
+            avatar = recipient.avatar,
+        )
+    },
 )
 
 private fun mapMessage(value: FfiMessageSnapshot): RustMessage = RustMessage(
@@ -236,6 +245,7 @@ private fun mapMessage(value: FfiMessageSnapshot): RustMessage = RustMessage(
     content = value.content,
     timestamp = value.timestamp,
     editedTimestamp = value.editedTimestamp,
+    authorAvatar = value.authorAvatar,
 )
 
 private fun mapMember(value: FfiMemberSnapshot): RustMember = RustMember(

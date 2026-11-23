@@ -1108,6 +1108,7 @@ fn merge_channel(existing: &Channel, incoming: Channel) -> Channel {
         position: incoming.position.or(existing.position),
         parent_id: incoming.parent_id.or(existing.parent_id),
         last_message_id: incoming.last_message_id.or(existing.last_message_id),
+        icon: incoming.icon.or_else(|| existing.icon.clone()),
         topic: incoming.topic.or_else(|| existing.topic.clone()),
         nsfw: incoming.nsfw.or(existing.nsfw),
         bitrate: incoming.bitrate.or(existing.bitrate),

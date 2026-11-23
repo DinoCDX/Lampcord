@@ -36,6 +36,7 @@ object RustSnapshotMapper {
             id = (message.authorId ?: 0uL).toString(),
             username = message.authorName,
             global_name = message.authorName,
+            avatar = message.authorAvatar,
         ),
         content = message.content,
         timestamp = message.timestamp,
@@ -145,5 +146,14 @@ object RustSnapshotMapper {
         parent_id = channel.parentId?.toString(),
         position = channel.position,
         last_message_id = null,
+        icon = channel.icon,
+        recipients = channel.recipients.map { recipient ->
+            User(
+                id = recipient.id.toString(),
+                username = recipient.username,
+                global_name = recipient.globalName,
+                avatar = recipient.avatar,
+            )
+        },
     )
 }

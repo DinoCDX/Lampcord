@@ -2544,7 +2544,9 @@ data class ChannelSnapshot (
     var `kind`: kotlin.UByte, 
     var `parentId`: kotlin.ULong?, 
     var `position`: kotlin.Int?, 
-    var `canView`: kotlin.Boolean
+    var `canView`: kotlin.Boolean, 
+    var `icon`: kotlin.String?, 
+    var `recipients`: List<RecipientSnapshot>
 ) {
     
     companion object
@@ -2563,6 +2565,8 @@ public object FfiConverterTypeChannelSnapshot: FfiConverterRustBuffer<ChannelSna
             FfiConverterOptionalULong.read(buf),
             FfiConverterOptionalInt.read(buf),
             FfiConverterBoolean.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterSequenceTypeRecipientSnapshot.read(buf),
         )
     }
 
@@ -2573,7 +2577,9 @@ public object FfiConverterTypeChannelSnapshot: FfiConverterRustBuffer<ChannelSna
             FfiConverterUByte.allocationSize(value.`kind`) +
             FfiConverterOptionalULong.allocationSize(value.`parentId`) +
             FfiConverterOptionalInt.allocationSize(value.`position`) +
-            FfiConverterBoolean.allocationSize(value.`canView`)
+            FfiConverterBoolean.allocationSize(value.`canView`) +
+            FfiConverterOptionalString.allocationSize(value.`icon`) +
+            FfiConverterSequenceTypeRecipientSnapshot.allocationSize(value.`recipients`)
     )
 
     override fun write(value: ChannelSnapshot, buf: ByteBuffer) {
@@ -2584,6 +2590,8 @@ public object FfiConverterTypeChannelSnapshot: FfiConverterRustBuffer<ChannelSna
             FfiConverterOptionalULong.write(value.`parentId`, buf)
             FfiConverterOptionalInt.write(value.`position`, buf)
             FfiConverterBoolean.write(value.`canView`, buf)
+            FfiConverterOptionalString.write(value.`icon`, buf)
+            FfiConverterSequenceTypeRecipientSnapshot.write(value.`recipients`, buf)
     }
 }
 
@@ -2958,6 +2966,7 @@ data class MessageSnapshot (
     var `channelId`: kotlin.ULong, 
     var `authorId`: kotlin.ULong?, 
     var `authorName`: kotlin.String, 
+    var `authorAvatar`: kotlin.String?, 
     var `content`: kotlin.String, 
     var `timestamp`: kotlin.String, 
     var `editedTimestamp`: kotlin.String?
@@ -2976,6 +2985,7 @@ public object FfiConverterTypeMessageSnapshot: FfiConverterRustBuffer<MessageSna
             FfiConverterULong.read(buf),
             FfiConverterOptionalULong.read(buf),
             FfiConverterString.read(buf),
+            FfiConverterOptionalString.read(buf),
             FfiConverterString.read(buf),
             FfiConverterString.read(buf),
             FfiConverterOptionalString.read(buf),
@@ -2987,6 +2997,7 @@ public object FfiConverterTypeMessageSnapshot: FfiConverterRustBuffer<MessageSna
             FfiConverterULong.allocationSize(value.`channelId`) +
             FfiConverterOptionalULong.allocationSize(value.`authorId`) +
             FfiConverterString.allocationSize(value.`authorName`) +
+            FfiConverterOptionalString.allocationSize(value.`authorAvatar`) +
             FfiConverterString.allocationSize(value.`content`) +
             FfiConverterString.allocationSize(value.`timestamp`) +
             FfiConverterOptionalString.allocationSize(value.`editedTimestamp`)
@@ -2997,6 +3008,7 @@ public object FfiConverterTypeMessageSnapshot: FfiConverterRustBuffer<MessageSna
             FfiConverterULong.write(value.`channelId`, buf)
             FfiConverterOptionalULong.write(value.`authorId`, buf)
             FfiConverterString.write(value.`authorName`, buf)
+            FfiConverterOptionalString.write(value.`authorAvatar`, buf)
             FfiConverterString.write(value.`content`, buf)
             FfiConverterString.write(value.`timestamp`, buf)
             FfiConverterOptionalString.write(value.`editedTimestamp`, buf)
@@ -3080,6 +3092,46 @@ public object FfiConverterTypeReadStateSnapshot: FfiConverterRustBuffer<ReadStat
             FfiConverterOptionalULong.write(value.`lastReadMessageId`, buf)
             FfiConverterUInt.write(value.`mentionCount`, buf)
             FfiConverterBoolean.write(value.`unread`, buf)
+    }
+}
+
+
+
+data class RecipientSnapshot (
+    var `id`: kotlin.ULong, 
+    var `username`: kotlin.String, 
+    var `globalName`: kotlin.String?, 
+    var `avatar`: kotlin.String?
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeRecipientSnapshot: FfiConverterRustBuffer<RecipientSnapshot> {
+    override fun read(buf: ByteBuffer): RecipientSnapshot {
+        return RecipientSnapshot(
+            FfiConverterULong.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: RecipientSnapshot) = (
+            FfiConverterULong.allocationSize(value.`id`) +
+            FfiConverterString.allocationSize(value.`username`) +
+            FfiConverterOptionalString.allocationSize(value.`globalName`) +
+            FfiConverterOptionalString.allocationSize(value.`avatar`)
+    )
+
+    override fun write(value: RecipientSnapshot, buf: ByteBuffer) {
+            FfiConverterULong.write(value.`id`, buf)
+            FfiConverterString.write(value.`username`, buf)
+            FfiConverterOptionalString.write(value.`globalName`, buf)
+            FfiConverterOptionalString.write(value.`avatar`, buf)
     }
 }
 
@@ -5512,6 +5564,34 @@ public object FfiConverterSequenceTypeReadStateSnapshot: FfiConverterRustBuffer<
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeReadStateSnapshot.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeRecipientSnapshot: FfiConverterRustBuffer<List<RecipientSnapshot>> {
+    override fun read(buf: ByteBuffer): List<RecipientSnapshot> {
+        val len = buf.getInt()
+        return List<RecipientSnapshot>(len) {
+            FfiConverterTypeRecipientSnapshot.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<RecipientSnapshot>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeRecipientSnapshot.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<RecipientSnapshot>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeRecipientSnapshot.write(it, buf)
         }
     }
 }

@@ -35,7 +35,7 @@ use crate::{
         AuthStateSnapshot, ChannelSnapshot, ClientSnapshot, GuildSnapshot, MAX_SNAPSHOT_MEMBERS,
         MAX_SNAPSHOT_PRESENCES, MAX_SNAPSHOT_READ_STATES, MEMBER_LIST_ROW_GROUP,
         MEMBER_LIST_ROW_MEMBER, MEMBER_LIST_ROW_PENDING, MemberListRowSnapshot, MemberListSnapshot,
-        MemberSnapshot, MessageSnapshot, PresenceSnapshot, ReadStateSnapshot,
+        MemberSnapshot, MessageSnapshot, PresenceSnapshot, ReadStateSnapshot, RecipientSnapshot,
         SNAPSHOT_SCHEMA_VERSION, SnapshotMetaPatch, SnapshotPatch, SnapshotVersions,
     },
     types::{
@@ -350,6 +350,7 @@ fn benchmark_snapshot() -> ClientSnapshot {
                 channel_id: 1,
                 author_id: Some(id % 100 + 1),
                 author_name: format!("user-{}", id % 100 + 1),
+                author_avatar: None,
                 content: format!("benchmark message {id}"),
                 timestamp: "2026-01-01T00:00:00Z".to_owned(),
                 edited_timestamp: None,
@@ -572,6 +573,7 @@ fn message_snapshot(message: &Message) -> MessageSnapshot {
             .clone()
             .filter(|name| !name.is_empty())
             .unwrap_or_else(|| message.author.username.clone()),
+        author_avatar: message.author.avatar.clone(),
         content: message.content.clone(),
         timestamp: message.timestamp.clone(),
         edited_timestamp: message.edited_timestamp.clone(),
@@ -594,6 +596,10 @@ fn message_snapshot_from_value(value: &Value) -> MessageSnapshot {
         .unwrap_or("unknown")
         .to_owned();
     MessageSnapshot {
+        author_avatar: author
+            .and_then(|author| author.get("avatar"))
+            .and_then(Value::as_str)
+            .map(str::to_owned),
         id: json_id(value.get("id")).unwrap_or_default(),
         channel_id: json_id(value.get("channel_id")).unwrap_or_default(),
         author_id,
@@ -781,6 +787,17 @@ fn channel_can_view(cache: &StateCache, channel: &Channel) -> bool {
 
 fn channel_snapshot(channel: &Channel, can_view: bool) -> ChannelSnapshot {
     ChannelSnapshot {
+        icon: channel.icon.clone(),
+        recipients: channel
+            .recipients
+            .iter()
+            .map(|user| RecipientSnapshot {
+                id: user.id,
+                username: user.username.clone(),
+                global_name: user.global_name.clone(),
+                avatar: user.avatar.clone(),
+            })
+            .collect(),
         can_view,
         id: channel.id,
         guild_id: channel.guild_id,
@@ -1290,8 +1307,17 @@ async fn run(
         }};
     }
 
+    let (fetch_tx, mut fetch_rx) = mpsc::unbounded_channel::<(Snowflake, Vec<Message>)>();
+
     loop {
         tokio::select! {
+            Some((channel_id, messages)) = fetch_rx.recv() => {
+                let selected = selected_channel_id == Some(channel_id);
+                fetched_messages.insert(channel_id, messages);
+                if selected {
+                    mark_snapshot_dirty!();
+                }
+            }
             maybe_cmd = cmd_rx.recv() => {
                 let Some(cmd) = maybe_cmd else { break; };
                 let is_add_reaction = matches!(&cmd, ClientCommand::AddReaction { .. });
@@ -1550,10 +1576,15 @@ async fn run(
                         selected_channel_id = next;
                         if let (Some(channel_id), Some(rest_client)) = (selected_channel_id, rest.clone()) {
                             let config = default_rest_config(&api_base, user_agent.as_deref(), active_token.clone());
-                            if let Ok(mut messages) = api::fetch_channel_messages(&*rest_client, &config, channel_id, 50, None).await {
-                                messages.sort_by(|left, right| left.id.cmp(&right.id));
-                                fetched_messages.insert(channel_id, messages);
-                            }
+                            let fetch_tx = fetch_tx.clone();
+                            tokio::spawn(async move {
+                                if let Ok(mut messages) =
+                                    api::fetch_channel_messages(&*rest_client, &config, channel_id, 50, None).await
+                                {
+                                    messages.sort_by(|left, right| left.id.cmp(&right.id));
+                                    let _ = fetch_tx.send((channel_id, messages));
+                                }
+                            });
                         }
                         mark_snapshot_dirty!();
                     }

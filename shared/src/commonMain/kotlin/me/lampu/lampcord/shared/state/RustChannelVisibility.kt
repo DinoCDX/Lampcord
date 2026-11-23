@@ -1,11 +1,11 @@
 package me.lampu.lampcord.shared.state
 
 object RustChannelVisibility {
-    private var viewable: Set<String> = emptySet()
+    private var hidden: Set<String> = emptySet()
 
-    fun replace(channelIds: List<String>) {
-        viewable = channelIds.toSet()
+    fun replaceHidden(channelIds: List<String>) {
+        hidden = channelIds.toSet()
     }
 
-    fun canView(channelId: String): Boolean = channelId in viewable
+    fun canView(channelId: String): Boolean = channelId !in hidden
 }

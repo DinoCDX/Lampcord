@@ -158,7 +158,7 @@ class RustCoreIntegration(
                 RustSnapshotMapper.mapChangedChannels(previous, snapshot)
             }
             channels.forEach(entityStore::updateChannel)
-            RustChannelVisibility.replace(snapshot.channels.filter { it.canView }.map { it.id.toString() })
+            RustChannelVisibility.replaceHidden(snapshot.channels.filter { !it.canView }.map { it.id.toString() })
             guildStore.setPrivateChannels(RustSnapshotMapper.mapPrivateChannels(snapshot))
         }
         if (membersChanged) {
