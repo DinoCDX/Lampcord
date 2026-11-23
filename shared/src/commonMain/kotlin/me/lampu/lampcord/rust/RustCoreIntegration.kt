@@ -45,6 +45,20 @@ class RustCoreIntegration(
     private var lastInjectedSnapshot: RustSnapshot? = null
     private var initialSelectionRestored = false
 
+    private var sentGuildId: String? = null
+    private var sentChannelId: String? = null
+
+    private fun syncSelection(guildId: String?, channelId: String?) {
+        if (guildId != sentGuildId) {
+            sentGuildId = guildId
+            engine.selectGuild(guildId?.toULongOrNull())
+        }
+        if (channelId != sentChannelId) {
+            sentChannelId = channelId
+            engine.selectChannel(channelId?.toULongOrNull())
+        }
+    }
+
     fun start() {
         if (job != null) return
         RustCoreMode.requireEnabled("store injection")
@@ -54,6 +68,13 @@ class RustCoreIntegration(
         lastInjectedSnapshot = null
 
         job = scope.launch {
+            // The UI owns the selection: push its changes to Rust so Rust's snapshots agree with it.
+            launch {
+                snapshotFlow { navigationStore.selectedGuild?.id to navigationStore.selectedChannel?.id }
+                    .distinctUntilChanged()
+                    .collect { (guildId, channelId) -> syncSelection(guildId, channelId) }
+            }
+
             launch {
                 var lastSeq: ULong? = null
                 engine.snapshots.collectLatest { snapshot ->
@@ -222,19 +243,16 @@ class RustCoreIntegration(
             }
         }
 
-        snapshot.currentUserId?.let { id ->
-            val name = snapshot.currentUser ?: id.toString()
-            userStore.setCurrentUser(User(id = id.toString(), username = name, global_name = name))
+        val lastUser = lastInjectedSnapshot
+        if (lastUser?.currentUserId != snapshot.currentUserId || lastUser?.currentUser != snapshot.currentUser) {
+            snapshot.currentUserId?.let { id ->
+                val name = snapshot.currentUser ?: id.toString()
+                userStore.setCurrentUser(User(id = id.toString(), username = name, global_name = name))
+            }
         }
 
-        val rustGuildId = snapshot.selectedGuildId?.toString()
-        val rustChannelId = snapshot.selectedChannelId?.toString()
-        if (rustGuildId != null && navigationStore.selectedGuild?.id != rustGuildId) {
-            entityStore.guilds.value[rustGuildId]?.let { navigationStore.selectedGuild = it }
-        }
-        if (rustChannelId != null && navigationStore.selectedChannel?.id != rustChannelId) {
-            entityStore.channels.value[rustChannelId]?.let { navigationStore.selectedChannel = it }
-        }
+        // Selection flows Kotlin -> Rust (syncSelection). Copying Rust's selection back here
+        // would snap the UI to an older selection on every snapshot, so it is not done.
     }
 
     private fun handle(event: RustEvent) {

@@ -81,6 +81,11 @@ pub struct CachedPresence {
 pub enum CacheError {
     MissingData(&'static str),
     InvalidPayload(serde_json::Error),
+    /// Some entries in the payload could not be decoded and were skipped. The rest were applied.
+    SkippedEntries {
+        event: &'static str,
+        count: usize,
+    },
 }
 
 impl std::fmt::Display for CacheError {
@@ -88,6 +93,9 @@ impl std::fmt::Display for CacheError {
         match self {
             Self::MissingData(field) => write!(formatter, "missing {field} in gateway payload"),
             Self::InvalidPayload(error) => write!(formatter, "invalid cache payload: {error}"),
+            Self::SkippedEntries { event, count } => {
+                write!(formatter, "skipped {count} undecodable entries in {event}")
+            }
         }
     }
 }
@@ -327,6 +335,7 @@ impl StateCache {
             }
         }
 
+        let mut skipped = 0usize;
         let mut guild_order = Vec::new();
         if let Some(guilds) = data.get("guilds").and_then(Value::as_array) {
             // `merged_members` is index-aligned with `guilds`, one member array per guild.
@@ -339,7 +348,13 @@ impl StateCache {
                         }
                     }
                 }
-                let guild: Guild = decode(value)?;
+                let guild: Guild = match decode(value) {
+                    Ok(guild) => guild,
+                    Err(_) => {
+                        skipped += 1;
+                        continue;
+                    }
+                };
                 if let Some(members) = merged_members
                     .and_then(|lists| lists.get(index))
                     .and_then(Value::as_array)
@@ -362,8 +377,10 @@ impl StateCache {
         for key in ["channels", "private_channels"] {
             if let Some(channels) = data.get(key).and_then(Value::as_array) {
                 for value in channels {
-                    let channel: Channel = decode(value)?;
-                    self.update_channel(channel);
+                    match decode::<Channel>(value) {
+                        Ok(channel) => self.update_channel(channel),
+                        Err(_) => skipped += 1,
+                    }
                 }
             }
         }
@@ -375,6 +392,12 @@ impl StateCache {
         }
 
         self.read_state.handle_ready(data);
+        if skipped > 0 {
+            return Err(CacheError::SkippedEntries {
+                event: "READY",
+                count: skipped,
+            });
+        }
         Ok(())
     }
 
@@ -497,11 +520,16 @@ impl StateCache {
         let guild: Guild = decode(data)?;
         self.merge_guild(guild.clone());
 
+        let mut skipped = 0usize;
         if let Some(channels) = data.get("channels").and_then(Value::as_array) {
             for value in channels {
-                let mut channel: Channel = decode(value)?;
-                channel.guild_id = Some(guild.id);
-                self.update_channel(channel);
+                match decode::<Channel>(value) {
+                    Ok(mut channel) => {
+                        channel.guild_id = Some(guild.id);
+                        self.update_channel(channel);
+                    }
+                    Err(_) => skipped += 1,
+                }
             }
         }
         if let Some(members) = data.get("members").and_then(Value::as_array) {
@@ -513,6 +541,12 @@ impl StateCache {
             for presence in presences {
                 self.cache_presence_value(presence);
             }
+        }
+        if skipped > 0 {
+            return Err(CacheError::SkippedEntries {
+                event: "GUILD_CREATE",
+                count: skipped,
+            });
         }
         Ok(())
     }
@@ -1543,6 +1577,44 @@ mod ordering_and_members_tests {
                 MemberListRow::Member(5),
                 MemberListRow::Member(6),
             ]
+        );
+    }
+
+    #[test]
+    fn one_undecodable_channel_does_not_hide_the_rest_of_the_guild() {
+        let mut cache = StateCache::new();
+        cache
+            .handle_event(
+                "READY",
+                Some(&json!({"user": {"id": "1", "username": "me"}, "guilds": [guild(10)]})),
+            )
+            .expect("ready");
+        let result = cache.handle_event(
+            "GUILD_CREATE",
+            Some(&json!({
+                "id": "10", "name": "g10",
+                "channels": [
+                    {"id": "100", "type": 0, "name": "general", "position": 0},
+                    {"type": 0, "name": "broken, no id"},
+                    {"id": "102", "type": 0, "name": "after-the-bad-one", "position": 2}
+                ]
+            })),
+        );
+        assert!(matches!(
+            result,
+            Err(CacheError::SkippedEntries {
+                event: "GUILD_CREATE",
+                count: 1
+            })
+        ));
+        let names: Vec<String> = cache
+            .channels_for_guild(10)
+            .iter()
+            .filter_map(|channel| channel.name.clone())
+            .collect();
+        assert_eq!(
+            names,
+            vec!["general".to_owned(), "after-the-bad-one".to_owned()]
         );
     }
 

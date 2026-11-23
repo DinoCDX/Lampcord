@@ -1513,12 +1513,16 @@ async fn run(
                         mark_snapshot_dirty!();
                     }
                     ClientCommand::SelectGuild { guild_id } => {
-                        selected_guild_id = guild_id.map(Snowflake::from);
-                        selected_channel_id = None;
-                        if let Some(guild_id) = selected_guild_id {
-                            subscribe_guild_members(guild_id, &cache, &gateway_outbound);
+                        // Re-selecting the same guild must not clear the channel or republish.
+                        let next = guild_id.map(Snowflake::from);
+                        if next != selected_guild_id {
+                            selected_guild_id = next;
+                            selected_channel_id = None;
+                            if let Some(guild_id) = selected_guild_id {
+                                subscribe_guild_members(guild_id, &cache, &gateway_outbound);
+                            }
+                            mark_snapshot_dirty!();
                         }
-                        mark_snapshot_dirty!();
                     }
                     ClientCommand::SetMemberListRanges { ranges } => {
                         if let Some(guild_id) = selected_guild_id {
@@ -1533,7 +1537,12 @@ async fn run(
                         }
                     }
                     ClientCommand::SelectChannel { channel_id } => {
-                        selected_channel_id = channel_id.map(Snowflake::from);
+                        // Only refetch and republish when the channel actually changes.
+                        let next = channel_id.map(Snowflake::from);
+                        if next == selected_channel_id {
+                            continue;
+                        }
+                        selected_channel_id = next;
                         if let (Some(channel_id), Some(rest_client)) = (selected_channel_id, rest.clone()) {
                             let config = default_rest_config(&api_base, user_agent.as_deref(), active_token.clone());
                             if let Ok(mut messages) = api::fetch_channel_messages(&*rest_client, &config, channel_id, 50, None).await {
