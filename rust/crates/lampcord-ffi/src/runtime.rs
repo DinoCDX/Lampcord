@@ -116,7 +116,6 @@ struct Session {
     task: tokio::task::JoinHandle<()>,
     cache: Arc<Mutex<StateCache>>,
     events: mpsc::UnboundedReceiver<GatewayEvent>,
-    /// Sends payloads (e.g. lazy guild requests) through the gateway task's socket.
     outbound: mpsc::UnboundedSender<Value>,
 }
 
@@ -684,8 +683,6 @@ fn json_id(value: Option<&Value>) -> Option<u64> {
     }
 }
 
-/// Opens the member list for a guild through its first text-like channel (opcode 14).
-/// The gateway then streams `GUILD_MEMBER_LIST_UPDATE` for the visible rows.
 fn subscribe_guild_members(
     guild_id: Snowflake,
     cache: &Option<Arc<Mutex<StateCache>>>,
@@ -694,7 +691,6 @@ fn subscribe_guild_members(
     request_member_list_ranges(guild_id, &[[0, 99]], cache, outbound);
 }
 
-/// Requests the given inclusive row ranges of a guild's member list (opcode 14).
 fn request_member_list_ranges(
     guild_id: Snowflake,
     ranges: &[[u32; 2]],
@@ -717,7 +713,6 @@ fn request_member_list_ranges(
     }
 }
 
-/// Snapshot of the selected guild's member list rows, resolved to member data.
 fn member_list_snapshot(cache: &StateCache, guild_id: Option<Snowflake>) -> MemberListSnapshot {
     let Some(guild_id) = guild_id else {
         return MemberListSnapshot::default();
@@ -770,7 +765,6 @@ fn pending_row() -> MemberListRowSnapshot {
     }
 }
 
-/// Evaluates VIEW_CHANNEL for the current user. DMs are always visible.
 fn channel_can_view(cache: &StateCache, channel: &Channel) -> bool {
     let Some(guild_id) = channel.guild_id else {
         return true;
@@ -778,10 +772,10 @@ fn channel_can_view(cache: &StateCache, channel: &Channel) -> bool {
     let (Some(guild), Some(user)) = (cache.guild(guild_id), cache.current_user()) else {
         return false;
     };
-    let member_roles = cache
-        .member(guild_id, user.id)
-        .map(|member| member.roles.clone())
-        .unwrap_or_default();
+    let Some(member) = cache.member(guild_id, user.id) else {
+        return true;
+    };
+    let member_roles = member.roles.clone();
     lampcord_core::permissions::can_view_channel(guild, channel, &member_roles, user.id)
 }
 
@@ -797,7 +791,6 @@ fn channel_snapshot(channel: &Channel, can_view: bool) -> ChannelSnapshot {
     }
 }
 
-/// Guild channels use their name. DMs have no name, so show the recipients instead.
 fn channel_display_name(channel: &Channel) -> String {
     if let Some(name) = channel.name.as_ref().filter(|name| !name.is_empty()) {
         return name.clone();
@@ -863,8 +856,6 @@ fn build_snapshot(
         })
         .collect();
 
-    // `channels` carries the selected guild's channels plus every DM / group DM
-    // (guild_id None). Kotlin separates them by guild_id when injecting.
     let guild_channels: Vec<Channel> = selected_guild_id
         .into_iter()
         .flat_map(|guild_id| {
@@ -1529,7 +1520,6 @@ async fn run(
                         mark_snapshot_dirty!();
                     }
                     ClientCommand::SelectGuild { guild_id } => {
-                        // Re-selecting the same guild must not clear the channel or republish.
                         let next = guild_id.map(Snowflake::from);
                         if next != selected_guild_id {
                             selected_guild_id = next;
@@ -1553,7 +1543,6 @@ async fn run(
                         }
                     }
                     ClientCommand::SelectChannel { channel_id } => {
-                        // Only refetch and republish when the channel actually changes.
                         let next = channel_id.map(Snowflake::from);
                         if next == selected_channel_id {
                             continue;
@@ -1832,7 +1821,6 @@ async fn run(
                     GatewayEvent::Ready { .. } => {
                         connection = ConnectionState::Ready;
                         error = None;
-                        // A reconnect drops the server-side member list subscription; restore it.
                         if let Some(guild_id) = selected_guild_id {
                             subscribe_guild_members(guild_id, &cache, &gateway_outbound);
                         }

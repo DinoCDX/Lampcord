@@ -13,7 +13,6 @@ pub struct UnavailableGuild {
 pub struct Role {
     #[serde(with = "crate::snowflake::serde")]
     pub id: Snowflake,
-    /// Permission bits as Discord sends them: a decimal string.
     #[serde(default = "zero_permissions")]
     pub permissions: String,
 }
@@ -42,7 +41,6 @@ pub struct Guild {
     pub member_count: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unavailable: Option<bool>,
-    /// Roles sent with the guild. The @everyone role has the same id as the guild.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub roles: Vec<Role>,
 }

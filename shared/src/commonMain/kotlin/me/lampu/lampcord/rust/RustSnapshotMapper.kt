@@ -18,7 +18,6 @@ object RustSnapshotMapper {
 
     fun mapChannels(snapshot: RustSnapshot): List<Channel> = snapshot.channels.map(::mapChannel)
 
-    /** DMs and group DMs: the snapshot's channels that belong to no guild. */
     fun mapPrivateChannels(snapshot: RustSnapshot): List<Channel> =
         snapshot.channels.filter { it.guildId == null }.map(::mapChannel)
 
@@ -72,7 +71,6 @@ object RustSnapshotMapper {
             .mapNotNull { state -> state.lastMessageId?.let { state.channelId.toString() to it.toString() } }
             .toMap()
 
-    /** The guild's member list rows in Discord order; null marks a row not yet received. */
     fun mapMemberListItems(snapshot: RustSnapshot): List<MemberListListItem?> =
         snapshot.memberList.rows.map { row ->
             when (row.kind) {
@@ -133,8 +131,6 @@ object RustSnapshotMapper {
         return current.filter { item -> previousById[key(item)] != item }
     }
 
-    // Kotlin's Guild.icon is the raw icon hash; CdnUrls builds the image URL from it.
-    // RustGuild.iconUrl carries that same hash, so it maps straight through.
     private fun mapGuild(guild: RustGuild): Guild = Guild(
         id = guild.id.toString(),
         name = guild.name,

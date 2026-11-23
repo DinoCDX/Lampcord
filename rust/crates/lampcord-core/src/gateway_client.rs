@@ -19,7 +19,6 @@ use crate::{
 
 pub const DEFAULT_GATEWAY_URL: &str = "wss://gateway.discord.gg";
 
-/// Opcode 14 (Lazy Guild Request): subscribes to member list / typing / activity updates for a guild.
 pub const OP_LAZY_REQUEST: i64 = 14;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -59,7 +58,6 @@ pub enum GatewayEvent {
     HandlerErrors {
         errors: Vec<crate::event_dispatch::HandlerError>,
     },
-    /// The connection attempt failed with an error (not a clean close). The core reconnects after this.
     Failed {
         message: String,
     },
@@ -262,8 +260,6 @@ pub fn heartbeat_payload(sequence: Option<u32>) -> Value {
     })
 }
 
-/// Builds an opcode 14 lazy request for one guild, asking for `ranges` of the member list
-/// visible through `channel_id`. Ranges are inclusive index pairs, e.g. `[0, 99]`.
 pub fn lazy_request_payload(
     guild_id: Snowflake,
     channel_id: Snowflake,
@@ -315,7 +311,6 @@ pub struct GatewayClient<T: GatewayTransport, U: GatewayUrlProvider> {
     identity: GatewayIdentity,
     dispatcher: Dispatcher,
     cache: Arc<Mutex<StateCache>>,
-    /// Payloads queued by the owner (e.g. lazy guild requests) to be written to the socket.
     outbound: Option<UnboundedReceiver<Value>>,
 }
 
@@ -340,8 +335,6 @@ impl<T: GatewayTransport, U: GatewayUrlProvider> GatewayClient<T, U> {
         self
     }
 
-    /// Attaches a queue of outbound payloads that the run loop writes to the socket.
-    /// The queue survives reconnects because it lives on the client, not on a single connection.
     pub fn with_outbound(mut self, outbound: UnboundedReceiver<Value>) -> Self {
         self.outbound = Some(outbound);
         self
@@ -411,8 +404,6 @@ impl<T: GatewayTransport, U: GatewayUrlProvider> GatewayClient<T, U> {
                 (next_heartbeat_at.max(now)).saturating_duration_since(now)
             };
 
-            // Outbound payloads take priority so a lazy request is written immediately,
-            // instead of waiting for the next inbound frame or heartbeat tick.
             let outbound = &mut self.outbound;
             let outbound_next = async move {
                 match outbound.as_mut() {

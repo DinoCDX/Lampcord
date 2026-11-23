@@ -139,7 +139,6 @@ pub enum ClientCommand {
     SelectChannel {
         channel_id: Option<u64>,
     },
-    /// Ranges of the selected guild's member list the UI is showing, as inclusive index pairs.
     SetMemberListRanges {
         ranges: Vec<Vec<u32>>,
     },

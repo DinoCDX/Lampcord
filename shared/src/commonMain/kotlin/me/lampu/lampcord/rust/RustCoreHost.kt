@@ -16,10 +16,6 @@ import me.lampu.lampcord.shared.state.SessionManager
 import me.lampu.lampcord.shared.state.UserStore
 import me.lampu.lampcord.shared.utils.Logging
 
-/**
- * Starts the Rust core for the lifetime of the composition and injects its snapshots into the
- * Kotlin stores. Falls back to the Kotlin gateway if the native library cannot be loaded.
- */
 @Composable
 fun RustCoreHost() {
     val sessionManager: SessionManager = koinInject()
@@ -59,8 +55,6 @@ fun RustCoreHost() {
                 memberListStore,
             )
             integration.start()
-            // The Kotlin gateway saves its token in Settings.discordToken, but the Rust core keeps
-            // its own token in the secret store. Without a token in settings, reconnect with the stored one.
             if (token != null) engine.connectToken(token) else engine.connectStoredToken()
             onDispose {
                 integration.close()

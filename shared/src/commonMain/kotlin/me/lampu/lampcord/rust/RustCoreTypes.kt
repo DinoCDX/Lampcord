@@ -1,6 +1,5 @@
 package me.lampu.lampcord.rust
 
-
 data class RustClientConfig(
     val apiBase: String = "https://discord.com/api/v9",
     val gatewayUrl: String? = null,
@@ -81,7 +80,6 @@ data class RustChannel(
     val kind: UByte,
     val parentId: ULong?,
     val position: Int?,
-    /** Whether the current user can see this channel, evaluated by the Rust core. */
     val canView: Boolean = true,
 )
 
@@ -162,7 +160,6 @@ data class RustSnapshot(
     val versions: RustSnapshotVersions = RustSnapshotVersions(),
 )
 
-/** One visible member-list row. [kind]: 0 = pending, 1 = group header, 2 = member. */
 data class RustMemberListRow(
     val kind: Int,
     val groupId: String? = null,

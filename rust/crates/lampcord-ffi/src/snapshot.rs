@@ -96,7 +96,6 @@ pub struct ChannelSnapshot {
     pub kind: u8,
     pub parent_id: Option<u64>,
     pub position: Option<i32>,
-    /// Whether the current user can see this channel (VIEW_CHANNEL after overwrites).
     pub can_view: bool,
 }
 
@@ -124,7 +123,6 @@ pub struct MemberSnapshot {
     pub status: Option<String>,
 }
 
-/// Row kinds in `MemberListRowSnapshot::kind`.
 pub const MEMBER_LIST_ROW_PENDING: u8 = 0;
 pub const MEMBER_LIST_ROW_GROUP: u8 = 1;
 pub const MEMBER_LIST_ROW_MEMBER: u8 = 2;

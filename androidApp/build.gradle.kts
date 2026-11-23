@@ -8,7 +8,6 @@ plugins {
     alias(libs.plugins.compose.compiler)
 }
 
-// Rust core (lampcord-ffi) is on by default; pass -PrustCore=false to build the Kotlin-only gateway.
 val rustCoreEnabled = providers.gradleProperty("rustCore").orElse("true").map { it.toBoolean() }
 val rustFfiJniLibsDir = rootProject.projectDir.resolve("androidApp/src/main/jniLibs")
 

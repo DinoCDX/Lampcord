@@ -41,7 +41,6 @@ impl GatewayTransport for TungsteniteGatewayTransport {
             request.headers_mut().insert(name, value);
         }
 
-        // Bounded so a stalled TCP connect or TLS handshake is reported instead of hanging.
         let (socket, _) = tokio::time::timeout(
             std::time::Duration::from_secs(20),
             tokio_tungstenite::connect_async(request),

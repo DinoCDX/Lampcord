@@ -1,8 +1,3 @@
-//! Discord's permission rules, evaluated in the core so every platform gets the same answer.
-//!
-//! Order: base permissions (owner, @everyone, member roles, administrator), then channel
-//! overwrites (@everyone, then all role overwrites together, then the member's own overwrite).
-
 use lampcord_model::{channel::Channel, guild::Guild, snowflake::Snowflake};
 use serde_json::Value;
 
@@ -12,7 +7,6 @@ const ALL_PERMISSIONS: u64 = u64::MAX;
 const OVERWRITE_ROLE: u64 = 0;
 const OVERWRITE_MEMBER: u64 = 1;
 
-/// Permissions the user has in the guild, before any channel overwrites.
 pub fn base_permissions(guild: &Guild, member_roles: &[Snowflake], user_id: Snowflake) -> u64 {
     if guild.owner_id == Some(user_id) {
         return ALL_PERMISSIONS;
@@ -28,13 +22,15 @@ pub fn base_permissions(guild: &Guild, member_roles: &[Snowflake], user_id: Snow
     }
 }
 
-/// Whether the user can see the channel. DMs (no guild) are always visible.
 pub fn can_view_channel(
     guild: &Guild,
     channel: &Channel,
     member_roles: &[Snowflake],
     user_id: Snowflake,
 ) -> bool {
+    if guild.roles.is_empty() {
+        return true;
+    }
     let base = base_permissions(guild, member_roles, user_id);
     if base & ADMINISTRATOR != 0 {
         return true;
@@ -75,7 +71,6 @@ fn apply_overwrites(
         permissions = (permissions & !everyone.deny) | everyone.allow;
     }
 
-    // Role overwrites apply together: all denies first, then all allows.
     let (mut allow, mut deny) = (0u64, 0u64);
     for overwrite in overwrites.iter().filter(|overwrite| {
         overwrite.kind == OVERWRITE_ROLE
@@ -193,6 +188,14 @@ mod tests {
     fn administrator_role_sees_private_channels() {
         let private = channel(json!([{"id": "1", "type": 0, "allow": "0", "deny": "1024"}]));
         assert!(can_view_channel(&guild(9), &private, &[id(60)], id(2)));
+    }
+
+    #[test]
+    fn channels_stay_visible_when_roles_are_not_known_yet() {
+        let guild: Guild =
+            serde_json::from_value(json!({"id": "1", "owner_id": "9"})).expect("guild");
+        let private = channel(json!([{"id": "1", "type": 0, "allow": "0", "deny": "1024"}]));
+        assert!(can_view_channel(&guild, &private, &[], id(2)));
     }
 
     #[test]

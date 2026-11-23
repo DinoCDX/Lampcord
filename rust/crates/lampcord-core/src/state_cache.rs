@@ -40,16 +40,10 @@ const HANDLED_EVENTS: &[&str] = &[
     "USER_SETTINGS_UPDATE",
 ];
 
-/// One row of a guild member list, in the order Discord sends it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MemberListRow {
-    /// Not received yet (or invalidated by the gateway).
     Pending,
-    /// Section header such as "online" or a role, with its member count when known.
-    Group {
-        id: String,
-        count: Option<u32>,
-    },
+    Group { id: String, count: Option<u32> },
     Member(Snowflake),
 }
 
@@ -81,11 +75,7 @@ pub struct CachedPresence {
 pub enum CacheError {
     MissingData(&'static str),
     InvalidPayload(serde_json::Error),
-    /// Some entries in the payload could not be decoded and were skipped. The rest were applied.
-    SkippedEntries {
-        event: &'static str,
-        count: usize,
-    },
+    SkippedEntries { event: &'static str, count: usize },
 }
 
 impl std::fmt::Display for CacheError {
@@ -123,9 +113,7 @@ pub struct StateCache {
     members: HashMap<Snowflake, HashMap<Snowflake, CachedMember>>,
     presences: HashMap<Snowflake, CachedPresence>,
     read_state: ReadStateStore,
-    /// Preferred rail order from user settings (folders first, then positions).
     guild_order_hint: Vec<Snowflake>,
-    /// Per-guild member list built from GUILD_MEMBER_LIST_UPDATE, in Discord's row order.
     member_lists: HashMap<Snowflake, MemberListState>,
 }
 
@@ -155,8 +143,6 @@ impl StateCache {
         self.users.get(&user_id)
     }
 
-    /// Guilds in rail order: ids listed in the user's settings come first, in that order.
-    /// Guilds missing from the settings keep their arrival order after them.
     pub fn ordered_guilds(&self) -> Vec<&Guild> {
         let rank: HashMap<Snowflake, usize> = self
             .guild_order_hint
@@ -319,7 +305,6 @@ impl StateCache {
             self.current_user = Some(user);
         }
 
-        // Users must be cached before members so member rows can resolve usernames and avatars.
         if let Some(users) = data.get("users").and_then(Value::as_array) {
             for value in users {
                 if let Ok(user) = decode::<User>(value) {
@@ -338,7 +323,6 @@ impl StateCache {
         let mut skipped = 0usize;
         let mut guild_order = Vec::new();
         if let Some(guilds) = data.get("guilds").and_then(Value::as_array) {
-            // `merged_members` is index-aligned with `guilds`, one member array per guild.
             let merged_members = data.get("merged_members").and_then(Value::as_array);
             for (index, value) in guilds.iter().enumerate() {
                 if let Some(guild_id) = snowflake(value.get("id")) {
@@ -372,7 +356,6 @@ impl StateCache {
         self.guild_order = guild_order;
 
         self.private_channel_ids.clear();
-        // A READY starts a fresh session: positional rows from the old session are stale.
         self.member_lists.clear();
         for key in ["channels", "private_channels"] {
             if let Some(channels) = data.get(key).and_then(Value::as_array) {
@@ -403,7 +386,6 @@ impl StateCache {
 
     fn handle_user_settings(&mut self, data: Option<&Value>) -> Result<(), CacheError> {
         let data = data.ok_or(CacheError::MissingData("USER_SETTINGS_UPDATE"))?;
-        // Partial settings updates may omit the order fields; keep the last known order then.
         let hint = guild_order_from_settings(data);
         if !hint.is_empty() {
             self.guild_order_hint = hint;
@@ -724,7 +706,6 @@ impl StateCache {
         ) else {
             return;
         };
-        // READY and member-list payloads often carry only `user_id`; fall back to the user cache.
         let cached = self.users.get(&user_id);
         let username = user
             .and_then(|user| user.get("username"))
@@ -838,7 +819,6 @@ impl StateCache {
             .cloned()
             .unwrap_or_default();
 
-        // Take the state out so member caching below can borrow `self` freely.
         let mut state = self.member_lists.remove(&guild_id).unwrap_or_default();
         if let Some(count) = u32_of(data.get("online_count")) {
             state.online_count = Some(count);
@@ -914,7 +894,6 @@ impl StateCache {
         Ok(())
     }
 
-    /// Caches one member-list item and returns the row it occupies.
     fn cache_list_item(&mut self, guild_id: Snowflake, item: &Value) -> MemberListRow {
         if let Some(group) = item.get("group") {
             return MemberListRow::Group {
@@ -1055,7 +1034,6 @@ impl GatewayEventHandler for StateCacheHandler {
     }
 }
 
-/// Rail order from user settings: folder members first, falling back to guild positions.
 fn guild_order_from_settings(settings: &Value) -> Vec<Snowflake> {
     let from_folders: Vec<Snowflake> = settings
         .get("guild_folders")
@@ -1520,7 +1498,6 @@ mod ordering_and_members_tests {
                 Some(&json!({"guild_id": "10", "ops": [{"op": "DELETE", "index": 2}]})),
             )
             .expect("delete");
-        // Row 2 was member 2 after the insert shifted rows: [group, 3, 1, 2] -> deleting index 2 removes user 1.
         assert!(cache.member(10, 1).is_none());
         assert!(cache.member(10, 2).is_some());
     }

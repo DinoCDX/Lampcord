@@ -69,7 +69,6 @@ class RustCoreIntegration(
         lastInjectedSnapshot = null
 
         job = scope.launch {
-            // The UI owns the selection: push its changes to Rust so Rust's snapshots agree with it.
             launch {
                 snapshotFlow { navigationStore.selectedGuild?.id to navigationStore.selectedChannel?.id }
                     .distinctUntilChanged()
@@ -202,7 +201,7 @@ class RustCoreIntegration(
         }
         val selectedChannelId = snapshot.selectedChannelId?.toString()
         if (selectedChannelId != null && (messagesChanged || selectionChanged)) {
-            if (previous != null && messagesChanged) {
+            if (previous != null && messagesChanged && !selectionChanged) {
                 removedIds(previous.messages, snapshot.messages, RustMessage::id).forEach { messageId ->
                     messageStore.handleMessageDelete(messageId, selectedChannelId)
                 }
@@ -233,8 +232,6 @@ class RustCoreIntegration(
             RustConnectionState.DISCONNECTED, RustConnectionState.ERROR -> {
                 navigationStore.isConnected = false
                 navigationStore.isConnecting = false
-                // A rejected token would otherwise leave the app on the loading screen, since
-                // the loading screen shows whenever a token is saved. Clear it and return to login.
                 if (snapshot.connection.state == RustConnectionState.ERROR &&
                     snapshot.connection.message == "Authentication failed"
                 ) {
@@ -253,8 +250,6 @@ class RustCoreIntegration(
             }
         }
 
-        // Selection flows Kotlin -> Rust (syncSelection). Copying Rust's selection back here
-        // would snap the UI to an older selection on every snapshot, so it is not done.
     }
 
     private fun handle(event: RustEvent) {

@@ -2544,9 +2544,6 @@ data class ChannelSnapshot (
     var `kind`: kotlin.UByte, 
     var `parentId`: kotlin.ULong?, 
     var `position`: kotlin.Int?, 
-    /**
-     * Whether the current user can see this channel (VIEW_CHANNEL after overwrites).
-     */
     var `canView`: kotlin.Boolean
 ) {
     
@@ -3546,9 +3543,6 @@ sealed class ClientCommand {
         companion object
     }
     
-    /**
-     * Ranges of the selected guild's member list the UI is showing, as inclusive index pairs.
-     */
     data class SetMemberListRanges(
         val `ranges`: List<List<kotlin.UInt>>) : ClientCommand() {
         companion object

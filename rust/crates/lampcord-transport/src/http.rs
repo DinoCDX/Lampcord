@@ -9,8 +9,6 @@ pub struct ReqwestRestTransport {
     client: reqwest::Client,
 }
 
-/// TLS config with bundled Mozilla roots. reqwest's default rustls verifier needs JNI setup on
-/// Android (rustls-platform-verifier), so without this every REST request fails certificate checks.
 fn webpki_tls_config() -> Result<rustls::ClientConfig, TransportError> {
     let mut roots = rustls::RootCertStore::empty();
     roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
@@ -28,8 +26,6 @@ impl ReqwestRestTransport {
 
     /// Create a transport with a persistent cookie jar, required for multi-step auth flows.
     pub fn new_with_cookie_store() -> Result<Self, TransportError> {
-        // Bounded timeouts: a stalled connect or TLS handshake must fail (and be reported)
-        // instead of hanging the login or gateway attempt for minutes.
         let client = reqwest::Client::builder()
             .tls_backend_preconfigured(webpki_tls_config()?)
             .cookie_store(true)

@@ -133,7 +133,6 @@ object PermissionHelper {
     }
 
     fun canViewChannel(member: Member, guild: Guild, channel: Channel, userId: String? = null): Boolean {
-        // In Rust mode the core evaluates VIEW_CHANNEL with the guild's roles and overwrites.
         if (me.lampu.lampcord.shared.state.RustCoreMode.enabled) {
             return me.lampu.lampcord.shared.state.RustChannelVisibility.canView(channel.id)
         }
