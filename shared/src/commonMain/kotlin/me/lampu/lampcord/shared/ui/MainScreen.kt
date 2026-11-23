@@ -35,6 +35,7 @@ fun MainScreen(
 ) {
     val currentUser by userStore.currentUser.collectAsState()
     val guilds by guildStore.guilds.collectAsState()
+    val hasSession = Settings.shared.discordToken.isNotBlank() || tokenStore.getAccounts().isNotEmpty()
 
     var showOnboarding by remember {
         mutableStateOf(
@@ -77,6 +78,17 @@ fun MainScreen(
             !me.lampu.lampcord.shared.ui.baseplates.usesDesktopBaseplate(maxWidth)
         Column(Modifier.fillMaxSize().then(if (hasVoiceBar) Modifier.statusBarsPadding() else Modifier)) {
             if (hasVoiceBar) VoiceConnectionPanel(voiceStore)
+            if (!navigationStore.isConnected && hasSession) {
+                Column(Modifier.fillMaxWidth()) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    Text(
+                        text = loadingMessage,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                    )
+                }
+            }
             AnimatedContent(
                 modifier = Modifier.weight(1f),
                 targetState = navigationStore.isConnected to navigationStore.isConnecting,
@@ -90,7 +102,7 @@ fun MainScreen(
                 label = "MainScreenContentTransition"
             ) { (isConnected, isConnecting) ->
                 when {
-                    isConnected -> {
+                    isConnected || hasSession -> {
                         MainAdaptiveScaffold(
                             navigationStore = navigationStore,
                             profileStore = profileStore,
@@ -98,22 +110,6 @@ fun MainScreen(
                             voiceStore = voiceStore,
                             onExitApp = onExitApp
                         )
-                    }
-                    isConnecting || Settings.shared.discordToken.isNotBlank() -> {
-                        Box(
-                            modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                ContainedLoadingIndicator(modifier = Modifier.size(48.dp))
-                                Spacer(Modifier.height(16.dp))
-                                Text(
-                                    text = loadingMessage,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
                     }
                     else -> {
                         LoginScreen(

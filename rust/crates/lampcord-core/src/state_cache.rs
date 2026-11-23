@@ -38,6 +38,9 @@ const HANDLED_EVENTS: &[&str] = &[
     "GUILD_MEMBER_LIST_UPDATE",
     "PRESENCE_UPDATE",
     "USER_SETTINGS_UPDATE",
+    "RELATIONSHIP_ADD",
+    "RELATIONSHIP_UPDATE",
+    "RELATIONSHIP_REMOVE",
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -116,6 +119,7 @@ pub struct StateCache {
     guild_order_hint: Vec<Snowflake>,
     member_lists: HashMap<Snowflake, MemberListState>,
     dirty: bool,
+    relationships: HashMap<Snowflake, CachedRelationship>,
 }
 
 impl StateCache {
@@ -296,6 +300,8 @@ impl StateCache {
             "PRESENCE_UPDATE" => self.handle_presence(data),
             "GUILD_MEMBER_LIST_UPDATE" => self.handle_member_list_update(data),
             "USER_SETTINGS_UPDATE" => self.handle_user_settings(data),
+            "RELATIONSHIP_ADD" | "RELATIONSHIP_UPDATE" => self.handle_relationship_upsert(data),
+            "RELATIONSHIP_REMOVE" => self.handle_relationship_remove(data),
             _ => Ok(()),
         }
     }
@@ -377,6 +383,12 @@ impl StateCache {
 
         self.private_channel_ids.clear();
         self.member_lists.clear();
+        self.relationships.clear();
+        if let Some(relationships) = data.get("relationships").and_then(Value::as_array) {
+            for value in relationships {
+                self.ingest_relationship(value);
+            }
+        }
         for key in ["channels", "private_channels"] {
             if let Some(channels) = data.get(key).and_then(Value::as_array) {
                 for value in channels {
@@ -402,6 +414,32 @@ impl StateCache {
             });
         }
         Ok(())
+    }
+
+    fn handle_relationship_upsert(&mut self, data: Option<&Value>) -> Result<(), CacheError> {
+        let data = data.ok_or(CacheError::MissingData("RELATIONSHIP"))?;
+        self.ingest_relationship(data);
+        Ok(())
+    }
+
+    fn handle_relationship_remove(&mut self, data: Option<&Value>) -> Result<(), CacheError> {
+        let data = data.ok_or(CacheError::MissingData("RELATIONSHIP_REMOVE"))?;
+        if let Some(user_id) = snowflake(data.get("id")) {
+            self.relationships.remove(&user_id);
+        }
+        Ok(())
+    }
+
+    fn ingest_relationship(&mut self, value: &Value) {
+        let Some(user_id) = snowflake(value.get("id")) else {
+            return;
+        };
+        let kind = value.get("type").and_then(Value::as_u64).unwrap_or(0) as u8;
+        if let Some(user) = value.get("user").and_then(|user| decode::<User>(user).ok()) {
+            self.cache_user(user);
+        }
+        self.relationships
+            .insert(user_id, CachedRelationship { user_id, kind });
     }
 
     fn handle_user_settings(&mut self, data: Option<&Value>) -> Result<(), CacheError> {
@@ -606,6 +644,10 @@ impl StateCache {
         let merged = match self.users.remove(&user.id) {
             Some(existing) => User {
                 avatar: user.avatar.clone().or_else(|| existing.avatar.clone()),
+                avatar_decoration_data: user
+                    .avatar_decoration_data
+                    .clone()
+                    .or_else(|| existing.avatar_decoration_data.clone()),
                 global_name: user
                     .global_name
                     .clone()
@@ -1037,6 +1079,15 @@ impl StateCache {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct CachedRelationship {
+    pub user_id: Snowflake,
+    pub kind: u8,
+}
+
+const PERSISTED_CHANNELS: usize = 20;
+const PERSISTED_MEMBERS_PER_GUILD: usize = 500;
+
 #[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
 pub struct PersistedCache {
     current_user: Option<User>,
@@ -1047,6 +1098,7 @@ pub struct PersistedCache {
     channels: Vec<Channel>,
     members: Vec<(Snowflake, Vec<CachedMember>)>,
     messages: Vec<(Snowflake, Vec<Message>)>,
+    relationships: Vec<CachedRelationship>,
 }
 
 const PERSISTED_MESSAGES_PER_CHANNEL: usize = 50;
@@ -1081,18 +1133,32 @@ impl StateCache {
             members: self
                 .members
                 .iter()
-                .map(|(guild_id, members)| (*guild_id, members.values().cloned().collect()))
-                .collect(),
-            messages: self
-                .messages
-                .iter()
-                .map(|(channel_id, messages)| {
-                    let start = messages
-                        .len()
-                        .saturating_sub(PERSISTED_MESSAGES_PER_CHANNEL);
-                    (*channel_id, messages[start..].to_vec())
+                .map(|(guild_id, members)| {
+                    (
+                        *guild_id,
+                        members
+                            .values()
+                            .take(PERSISTED_MEMBERS_PER_GUILD)
+                            .cloned()
+                            .collect(),
+                    )
                 })
                 .collect(),
+            messages: self
+                .message_channel_order
+                .iter()
+                .rev()
+                .take(PERSISTED_CHANNELS)
+                .filter_map(|channel_id| {
+                    self.messages.get(channel_id).map(|messages| {
+                        let start = messages
+                            .len()
+                            .saturating_sub(PERSISTED_MESSAGES_PER_CHANNEL);
+                        (*channel_id, messages[start..].to_vec())
+                    })
+                })
+                .collect(),
+            relationships: self.relationships.values().cloned().collect(),
         }
     }
 
@@ -1116,6 +1182,10 @@ impl StateCache {
         for (channel_id, messages) in &persisted.messages {
             self.messages.insert(*channel_id, messages.clone());
             self.message_channel_order.push_back(*channel_id);
+        }
+        for relationship in &persisted.relationships {
+            self.relationships
+                .insert(relationship.user_id, relationship.clone());
         }
         self.dirty = false;
     }
@@ -1756,6 +1826,39 @@ mod ordering_and_members_tests {
                 .as_deref(),
             Some("av")
         );
+    }
+
+    #[test]
+    fn relationships_survive_a_persist_and_restore() {
+        let mut cache = StateCache::new();
+        cache
+            .handle_event(
+                "READY",
+                Some(&json!({
+                    "user": {"id": "1", "username": "me"},
+                    "guilds": [],
+                    "relationships": [{"id": "55", "type": 1, "user": {"id": "55", "username": "alice"}}]
+                })),
+            )
+            .expect("ready");
+        cache
+            .handle_event("RELATIONSHIP_REMOVE", Some(&json!({"id": "55"})))
+            .expect("remove");
+        cache
+            .handle_event("RELATIONSHIP_ADD", Some(&json!({"id": "66", "type": 1})))
+            .expect("add");
+        let bytes = cache.persisted().to_bytes().expect("serialize");
+        let persisted = PersistedCache::from_bytes(&bytes).expect("deserialize");
+        let mut restored = StateCache::new();
+        restored.restore(&persisted);
+        assert_eq!(
+            restored
+                .relationships
+                .get(&66)
+                .map(|relationship| relationship.kind),
+            Some(1)
+        );
+        assert!(restored.relationships.get(&55).is_none());
     }
 
     #[test]
