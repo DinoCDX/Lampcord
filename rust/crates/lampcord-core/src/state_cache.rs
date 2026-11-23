@@ -646,6 +646,11 @@ impl StateCache {
                     .or_else(|| existing.permissions.clone()),
                 member_count: incoming.member_count.or(existing.member_count),
                 unavailable: incoming.unavailable.or(existing.unavailable),
+                roles: if incoming.roles.is_empty() {
+                    existing.roles.clone()
+                } else {
+                    incoming.roles
+                },
             },
             None => incoming,
         };

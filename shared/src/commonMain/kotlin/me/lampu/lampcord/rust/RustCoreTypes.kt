@@ -81,6 +81,8 @@ data class RustChannel(
     val kind: UByte,
     val parentId: ULong?,
     val position: Int?,
+    /** Whether the current user can see this channel, evaluated by the Rust core. */
+    val canView: Boolean = true,
 )
 
 data class RustMessage(

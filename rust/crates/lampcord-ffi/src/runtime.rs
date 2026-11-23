@@ -770,8 +770,24 @@ fn pending_row() -> MemberListRowSnapshot {
     }
 }
 
-fn channel_snapshot(channel: &Channel) -> ChannelSnapshot {
+/// Evaluates VIEW_CHANNEL for the current user. DMs are always visible.
+fn channel_can_view(cache: &StateCache, channel: &Channel) -> bool {
+    let Some(guild_id) = channel.guild_id else {
+        return true;
+    };
+    let (Some(guild), Some(user)) = (cache.guild(guild_id), cache.current_user()) else {
+        return false;
+    };
+    let member_roles = cache
+        .member(guild_id, user.id)
+        .map(|member| member.roles.clone())
+        .unwrap_or_default();
+    lampcord_core::permissions::can_view_channel(guild, channel, &member_roles, user.id)
+}
+
+fn channel_snapshot(channel: &Channel, can_view: bool) -> ChannelSnapshot {
     ChannelSnapshot {
+        can_view,
         id: channel.id,
         guild_id: channel.guild_id,
         name: channel_display_name(channel),
@@ -862,7 +878,7 @@ fn build_snapshot(
     let channels: Vec<ChannelSnapshot> = guild_channels
         .iter()
         .chain(cache.private_channels())
-        .map(channel_snapshot)
+        .map(|channel| channel_snapshot(channel, channel_can_view(&cache, channel)))
         .collect();
 
     let mut messages: Vec<MessageSnapshot> = if let Some(channel_id) = selected_channel_id {

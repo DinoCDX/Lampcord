@@ -225,6 +225,7 @@ private fun mapChannel(value: FfiChannelSnapshot): RustChannel = RustChannel(
     kind = value.kind,
     parentId = value.parentId,
     position = value.position,
+    canView = value.canView,
 )
 
 private fun mapMessage(value: FfiMessageSnapshot): RustMessage = RustMessage(

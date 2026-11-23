@@ -2543,7 +2543,11 @@ data class ChannelSnapshot (
     var `name`: kotlin.String, 
     var `kind`: kotlin.UByte, 
     var `parentId`: kotlin.ULong?, 
-    var `position`: kotlin.Int?
+    var `position`: kotlin.Int?, 
+    /**
+     * Whether the current user can see this channel (VIEW_CHANNEL after overwrites).
+     */
+    var `canView`: kotlin.Boolean
 ) {
     
     companion object
@@ -2561,6 +2565,7 @@ public object FfiConverterTypeChannelSnapshot: FfiConverterRustBuffer<ChannelSna
             FfiConverterUByte.read(buf),
             FfiConverterOptionalULong.read(buf),
             FfiConverterOptionalInt.read(buf),
+            FfiConverterBoolean.read(buf),
         )
     }
 
@@ -2570,7 +2575,8 @@ public object FfiConverterTypeChannelSnapshot: FfiConverterRustBuffer<ChannelSna
             FfiConverterString.allocationSize(value.`name`) +
             FfiConverterUByte.allocationSize(value.`kind`) +
             FfiConverterOptionalULong.allocationSize(value.`parentId`) +
-            FfiConverterOptionalInt.allocationSize(value.`position`)
+            FfiConverterOptionalInt.allocationSize(value.`position`) +
+            FfiConverterBoolean.allocationSize(value.`canView`)
     )
 
     override fun write(value: ChannelSnapshot, buf: ByteBuffer) {
@@ -2580,6 +2586,7 @@ public object FfiConverterTypeChannelSnapshot: FfiConverterRustBuffer<ChannelSna
             FfiConverterUByte.write(value.`kind`, buf)
             FfiConverterOptionalULong.write(value.`parentId`, buf)
             FfiConverterOptionalInt.write(value.`position`, buf)
+            FfiConverterBoolean.write(value.`canView`, buf)
     }
 }
 

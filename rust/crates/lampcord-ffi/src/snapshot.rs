@@ -96,6 +96,8 @@ pub struct ChannelSnapshot {
     pub kind: u8,
     pub parent_id: Option<u64>,
     pub position: Option<i32>,
+    /// Whether the current user can see this channel (VIEW_CHANNEL after overwrites).
+    pub can_view: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

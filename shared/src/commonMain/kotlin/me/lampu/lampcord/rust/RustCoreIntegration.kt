@@ -20,6 +20,7 @@ import me.lampu.lampcord.shared.state.GuildStore
 import me.lampu.lampcord.shared.state.MessageStore
 import me.lampu.lampcord.shared.state.NavigationStore
 import me.lampu.lampcord.shared.state.PresenceStore
+import me.lampu.lampcord.shared.state.RustChannelVisibility
 import me.lampu.lampcord.shared.state.RustCoreMode
 import me.lampu.lampcord.shared.state.RustCoreWriteGuard
 import me.lampu.lampcord.shared.state.UserStore
@@ -158,6 +159,7 @@ class RustCoreIntegration(
                 RustSnapshotMapper.mapChangedChannels(previous, snapshot)
             }
             channels.forEach(entityStore::updateChannel)
+            RustChannelVisibility.replace(snapshot.channels.filter { it.canView }.map { it.id.toString() })
             guildStore.setPrivateChannels(RustSnapshotMapper.mapPrivateChannels(snapshot))
         }
         if (membersChanged) {
