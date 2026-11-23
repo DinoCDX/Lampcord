@@ -20,7 +20,7 @@ use lampcord_core::{
     rest::RestConfig,
     rest_client::RestClient,
     secret_store::{FileSecretStore, SecretStore},
-    state_cache::{CachedPresence, MemberListRow, StateCache},
+    state_cache::{CachedPresence, MemberListRow, PersistedCache, StateCache},
     token_store::{SavedAccount, TokenStore},
     traits::{CaptchaSolver, GatewayUrlProvider},
 };
@@ -1203,7 +1203,22 @@ async fn run(
     let mut connection = ConnectionState::Disconnected;
     let mut error: Option<String> = None;
     let mut active_token: Option<String> = None;
-    let mut cache: Option<Arc<Mutex<StateCache>>> = None;
+    let cache_file = config
+        .storage_path
+        .as_deref()
+        .map(|path| std::path::Path::new(path).with_file_name("lampcord-cache.bin"));
+    let mut persisted_initial: Option<PersistedCache> = cache_file
+        .as_ref()
+        .and_then(|file| std::fs::read(file).ok())
+        .and_then(|bytes| PersistedCache::from_bytes(&bytes));
+    let preloaded = Arc::new(Mutex::new(StateCache::new()));
+    if let Some(persisted) = &persisted_initial {
+        preloaded.lock().expect("cache lock").restore(persisted);
+    }
+    let mut cache: Option<Arc<Mutex<StateCache>>> = Some(preloaded);
+    let mut persist_ticker = tokio::time::interval(std::time::Duration::from_secs(5));
+    persist_ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    persist_ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     let mut rest: Option<Arc<FfiRestClient>> = None;
     let mut selected_guild_id: Option<Snowflake> = None;
     let mut selected_channel_id: Option<Snowflake> = None;
@@ -1309,6 +1324,10 @@ async fn run(
                     gateway_outbound = Some(session.outbound.clone());
                     gateway_task = Some(session.task);
                     gateway_events = Some(session.events);
+                    if let Some(persisted) = &persisted_initial {
+                        session.cache.lock().expect("cache lock").restore(persisted);
+                    }
+                    persisted_initial = None;
                     cache = Some(session.cache);
                     rest = Some(rest_client);
                     active_token = Some(token.clone());
@@ -1365,6 +1384,9 @@ async fn run(
                         break;
                     }
                     ClientCommand::Logout => {
+                        if let Some(file) = &cache_file {
+                            let _ = std::fs::remove_file(file);
+                        }
                         if let Some(task) = gateway_task.take() { task.abort(); }
                         if let Some(cancel) = remote_cancel.take() { let _ = cancel.send(()); }
                         if let Some(task) = remote_task.take() { task.abort(); }
@@ -1940,6 +1962,22 @@ async fn run(
                     mark_snapshot_dirty!();
                 }
                 flush_snapshot!(false);
+            }
+            _ = persist_ticker.tick() => {
+                if let (Some(live), Some(file)) = (cache.clone(), cache_file.clone()) {
+                    let persisted = live.lock().expect("cache lock").take_persisted_if_dirty();
+                    if let Some(persisted) = persisted {
+                        tokio::task::spawn_blocking(move || {
+                            let Ok(bytes) = persisted.to_bytes() else {
+                                return;
+                            };
+                            let temp = file.with_extension("tmp");
+                            if std::fs::write(&temp, bytes).is_ok() {
+                                let _ = std::fs::rename(&temp, &file);
+                            }
+                        });
+                    }
+                }
             }
             _ = flush_ticker.tick() => {
                 flush_snapshot!(false);

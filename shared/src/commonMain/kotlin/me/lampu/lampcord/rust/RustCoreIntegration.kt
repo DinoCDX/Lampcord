@@ -229,9 +229,10 @@ class RustCoreIntegration(
             }
             RustConnectionState.CONNECTING, RustConnectionState.RESUMING -> {
                 navigationStore.isConnecting = true
+                navigationStore.isConnected = snapshot.guilds.isNotEmpty()
             }
             RustConnectionState.DISCONNECTED, RustConnectionState.ERROR -> {
-                navigationStore.isConnected = false
+                navigationStore.isConnected = snapshot.guilds.isNotEmpty()
                 navigationStore.isConnecting = false
                 if (snapshot.connection.state == RustConnectionState.ERROR &&
                     snapshot.connection.message == "Authentication failed"

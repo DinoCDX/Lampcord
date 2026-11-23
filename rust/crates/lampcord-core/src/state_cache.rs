@@ -54,7 +54,7 @@ pub struct MemberListState {
     pub member_count: Option<u32>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct CachedMember {
     pub guild_id: Snowflake,
     pub user_id: Snowflake,
@@ -115,6 +115,7 @@ pub struct StateCache {
     read_state: ReadStateStore,
     guild_order_hint: Vec<Snowflake>,
     member_lists: HashMap<Snowflake, MemberListState>,
+    dirty: bool,
 }
 
 impl StateCache {
@@ -275,6 +276,9 @@ impl StateCache {
         event_type: &str,
         data: Option<&Value>,
     ) -> Result<(), CacheError> {
+        if !matches!(event_type, "PRESENCE_UPDATE" | "TYPING_START") {
+            self.dirty = true;
+        }
         match event_type {
             "READY" => self.handle_ready(data),
             "MESSAGE_CREATE" => self.handle_message_create(data),
@@ -354,6 +358,22 @@ impl StateCache {
             }
         }
         self.guild_order = guild_order;
+        self.guilds.retain(|id, _| self.guild_order.contains(id));
+        self.guild_channels
+            .retain(|guild_id, _| self.guilds.contains_key(guild_id));
+        let stale_channels: Vec<Snowflake> = self
+            .channels
+            .values()
+            .filter(|channel| {
+                channel
+                    .guild_id
+                    .is_some_and(|guild_id| !self.guilds.contains_key(&guild_id))
+            })
+            .map(|channel| channel.id)
+            .collect();
+        for channel_id in stale_channels {
+            self.channels.remove(&channel_id);
+        }
 
         self.private_channel_ids.clear();
         self.member_lists.clear();
@@ -583,7 +603,18 @@ impl StateCache {
     }
 
     fn cache_user(&mut self, user: User) {
-        self.users.insert(user.id, user);
+        let merged = match self.users.remove(&user.id) {
+            Some(existing) => User {
+                avatar: user.avatar.clone().or_else(|| existing.avatar.clone()),
+                global_name: user
+                    .global_name
+                    .clone()
+                    .or_else(|| existing.global_name.clone()),
+                ..user
+            },
+            None => user,
+        };
+        self.users.insert(merged.id, merged);
         if self.users.len() > MAX_CACHED_USERS {
             let current_id = self.current_user.as_ref().map(|u| u.id);
             let mut to_remove = Vec::new();
@@ -643,6 +674,7 @@ impl StateCache {
     }
 
     pub fn upsert_channels(&mut self, channels: Vec<Channel>) {
+        self.dirty = true;
         for channel in channels {
             self.update_channel(channel);
         }
@@ -1002,6 +1034,90 @@ impl StateCache {
                 self.messages.remove(&oldest);
             }
         }
+    }
+}
+
+#[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PersistedCache {
+    current_user: Option<User>,
+    users: Vec<User>,
+    guilds: Vec<Guild>,
+    guild_order: Vec<Snowflake>,
+    guild_order_hint: Vec<Snowflake>,
+    channels: Vec<Channel>,
+    members: Vec<(Snowflake, Vec<CachedMember>)>,
+    messages: Vec<(Snowflake, Vec<Message>)>,
+}
+
+const PERSISTED_MESSAGES_PER_CHANNEL: usize = 50;
+
+impl PersistedCache {
+    pub fn to_bytes(&self) -> Result<Vec<u8>, rmp_serde::encode::Error> {
+        rmp_serde::to_vec_named(self)
+    }
+
+    pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
+        rmp_serde::from_slice(bytes).ok()
+    }
+}
+
+impl StateCache {
+    pub fn take_persisted_if_dirty(&mut self) -> Option<PersistedCache> {
+        if !self.dirty {
+            return None;
+        }
+        self.dirty = false;
+        Some(self.persisted())
+    }
+
+    pub fn persisted(&self) -> PersistedCache {
+        PersistedCache {
+            current_user: self.current_user.clone(),
+            users: self.users.values().cloned().collect(),
+            guilds: self.guilds.values().cloned().collect(),
+            guild_order: self.guild_order.clone(),
+            guild_order_hint: self.guild_order_hint.clone(),
+            channels: self.channels.values().cloned().collect(),
+            members: self
+                .members
+                .iter()
+                .map(|(guild_id, members)| (*guild_id, members.values().cloned().collect()))
+                .collect(),
+            messages: self
+                .messages
+                .iter()
+                .map(|(channel_id, messages)| {
+                    let start = messages
+                        .len()
+                        .saturating_sub(PERSISTED_MESSAGES_PER_CHANNEL);
+                    (*channel_id, messages[start..].to_vec())
+                })
+                .collect(),
+        }
+    }
+
+    pub fn restore(&mut self, persisted: &PersistedCache) {
+        self.current_user = persisted.current_user.clone();
+        for user in &persisted.users {
+            self.users.insert(user.id, user.clone());
+        }
+        for guild in &persisted.guilds {
+            self.guilds.insert(guild.id, guild.clone());
+        }
+        self.guild_order = persisted.guild_order.clone();
+        self.guild_order_hint = persisted.guild_order_hint.clone();
+        self.upsert_channels(persisted.channels.clone());
+        for (guild_id, members) in &persisted.members {
+            let entry = self.members.entry(*guild_id).or_default();
+            for member in members {
+                entry.insert(member.user_id, member.clone());
+            }
+        }
+        for (channel_id, messages) in &persisted.messages {
+            self.messages.insert(*channel_id, messages.clone());
+            self.message_channel_order.push_back(*channel_id);
+        }
+        self.dirty = false;
     }
 }
 
@@ -1604,6 +1720,73 @@ mod ordering_and_members_tests {
         assert_eq!(
             names,
             vec!["general".to_owned(), "after-the-bad-one".to_owned()]
+        );
+    }
+
+    #[test]
+    fn persisted_cache_round_trips_guilds_channels_and_users() {
+        let mut cache = StateCache::new();
+        cache
+            .handle_event(
+                "READY",
+                Some(&json!({
+                    "user": {"id": "1", "username": "me"},
+                    "guilds": [guild(10)],
+                    "users": [{"id": "55", "username": "alice", "avatar": "av"}]
+                })),
+            )
+            .expect("ready");
+        cache
+            .handle_event(
+                "GUILD_CREATE",
+                Some(&json!({"id": "10", "name": "g10", "channels": [{"id": "100", "type": 0, "name": "general"}]})),
+            )
+            .expect("guild create");
+        let bytes = cache.persisted().to_bytes().expect("serialize");
+        let persisted = PersistedCache::from_bytes(&bytes).expect("deserialize");
+
+        let mut restored = StateCache::new();
+        restored.restore(&persisted);
+        assert_eq!(restored.guild(10).map(|guild| guild.id), Some(10));
+        assert_eq!(restored.channels_for_guild(10).len(), 1);
+        assert_eq!(
+            restored
+                .user(55)
+                .and_then(|user| user.avatar.clone())
+                .as_deref(),
+            Some("av")
+        );
+    }
+
+    #[test]
+    fn partial_user_update_keeps_the_cached_avatar() {
+        let mut cache = StateCache::new();
+        cache
+            .handle_event(
+                "READY",
+                Some(&json!({
+                    "user": {"id": "1", "username": "me"},
+                    "guilds": [guild(10)],
+                    "users": [{"id": "55", "username": "alice", "avatar": "av"}]
+                })),
+            )
+            .expect("ready");
+        cache
+            .handle_event(
+                "READY",
+                Some(&json!({
+                    "user": {"id": "1", "username": "me"},
+                    "guilds": [guild(10)],
+                    "users": [{"id": "55", "username": "alice"}]
+                })),
+            )
+            .expect("second ready");
+        assert_eq!(
+            cache
+                .user(55)
+                .and_then(|user| user.avatar.clone())
+                .as_deref(),
+            Some("av")
         );
     }
 

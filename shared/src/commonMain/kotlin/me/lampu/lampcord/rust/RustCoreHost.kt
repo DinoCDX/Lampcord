@@ -18,6 +18,7 @@ import me.lampu.lampcord.shared.state.RustCoreMode
 import me.lampu.lampcord.shared.state.SessionManager
 import me.lampu.lampcord.shared.state.UserStore
 import me.lampu.lampcord.shared.utils.Logging
+import me.lampu.lampcord.shared.utils.getAppStoragePath
 
 @Composable
 fun RustCoreHost() {
@@ -34,7 +35,7 @@ fun RustCoreHost() {
     LaunchedEffect(sessionManager) {
         val engine = withContext(Dispatchers.Default) {
             try {
-                RustCoreEngine(RustClientConfig())
+                RustCoreEngine(RustClientConfig(storagePath = "${getAppStoragePath()}/lampcord-accounts.json"))
             } catch (error: Throwable) {
                 Logging.e("RustCore", "RustCoreEngine init failed", error)
                 null

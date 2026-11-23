@@ -227,7 +227,7 @@ fun main() {
                     val memberListStore: MemberListStore = koinInject()
                     DisposableEffect(sessionManager) {
                         val engine = try {
-                            RustCoreEngine(RustClientConfig())
+                            RustCoreEngine(RustClientConfig(storagePath = "${me.lampu.lampcord.shared.utils.getAppStoragePath()}/lampcord-accounts.json"))
                         } catch (error: Throwable) {
                             Logging.e("RustCore", "RustCoreEngine init failed", error)
                             null
