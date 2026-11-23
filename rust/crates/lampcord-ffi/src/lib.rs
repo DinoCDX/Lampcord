@@ -1,6 +1,7 @@
 #[cfg(feature = "uniffi")]
 uniffi::setup_scaffolding!();
 
+pub mod c_api;
 pub mod error;
 pub mod runtime;
 pub mod snapshot;

@@ -113,7 +113,7 @@ object RustSnapshotMapper {
                     username = relationship.username,
                     global_name = relationship.globalName,
                     avatar = relationship.avatar,
-                    avatar_decoration = relationship.avatarDecoration?.let { AvatarDecorationData(asset = it) },
+                    avatar_decoration_data = relationship.avatarDecoration?.let { AvatarDecorationData(asset = it) },
                 ),
                 user_id = id,
             )
