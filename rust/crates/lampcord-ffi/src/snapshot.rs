@@ -97,6 +97,7 @@ pub struct ChannelSnapshot {
     pub parent_id: Option<u64>,
     pub position: Option<i32>,
     pub can_view: bool,
+    pub can_send: bool,
     pub icon: Option<String>,
     pub recipients: Vec<RecipientSnapshot>,
 }

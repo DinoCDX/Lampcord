@@ -119,6 +119,11 @@ struct Session {
     outbound: mpsc::UnboundedSender<Value>,
 }
 
+enum InternalEvent {
+    Messages(Snowflake, Vec<Message>),
+    PrivateChannels(Vec<Channel>),
+}
+
 fn default_rest_config(
     api_base: &str,
     user_agent: Option<&str>,
@@ -785,8 +790,23 @@ fn channel_can_view(cache: &StateCache, channel: &Channel) -> bool {
     lampcord_core::permissions::can_view_channel(guild, channel, &member_roles, user.id)
 }
 
-fn channel_snapshot(channel: &Channel, can_view: bool) -> ChannelSnapshot {
+fn channel_can_send(cache: &StateCache, channel: &Channel) -> bool {
+    let Some(guild_id) = channel.guild_id else {
+        return true;
+    };
+    let (Some(guild), Some(user)) = (cache.guild(guild_id), cache.current_user()) else {
+        return false;
+    };
+    let Some(member) = cache.member(guild_id, user.id) else {
+        return true;
+    };
+    let member_roles = member.roles.clone();
+    lampcord_core::permissions::can_send_messages(guild, channel, &member_roles, user.id)
+}
+
+fn channel_snapshot(channel: &Channel, can_view: bool, can_send: bool) -> ChannelSnapshot {
     ChannelSnapshot {
+        can_send,
         icon: channel.icon.clone(),
         recipients: channel
             .recipients
@@ -886,7 +906,13 @@ fn build_snapshot(
     let channels: Vec<ChannelSnapshot> = guild_channels
         .iter()
         .chain(cache.private_channels())
-        .map(|channel| channel_snapshot(channel, channel_can_view(&cache, channel)))
+        .map(|channel| {
+            channel_snapshot(
+                channel,
+                channel_can_view(&cache, channel),
+                channel_can_send(&cache, channel),
+            )
+        })
         .collect();
 
     let mut messages: Vec<MessageSnapshot> = if let Some(channel_id) = selected_channel_id {
@@ -1307,15 +1333,25 @@ async fn run(
         }};
     }
 
-    let (fetch_tx, mut fetch_rx) = mpsc::unbounded_channel::<(Snowflake, Vec<Message>)>();
+    let (fetch_tx, mut fetch_rx) = mpsc::unbounded_channel::<InternalEvent>();
 
     loop {
         tokio::select! {
-            Some((channel_id, messages)) = fetch_rx.recv() => {
-                let selected = selected_channel_id == Some(channel_id);
-                fetched_messages.insert(channel_id, messages);
-                if selected {
-                    mark_snapshot_dirty!();
+            Some(event) = fetch_rx.recv() => {
+                match event {
+                    InternalEvent::Messages(channel_id, messages) => {
+                        let selected = selected_channel_id == Some(channel_id);
+                        fetched_messages.insert(channel_id, messages);
+                        if selected {
+                            mark_snapshot_dirty!();
+                        }
+                    }
+                    InternalEvent::PrivateChannels(channels) => {
+                        if let Some(cache) = &cache {
+                            cache.lock().expect("cache lock").upsert_channels(channels);
+                        }
+                        mark_snapshot_dirty!();
+                    }
                 }
             }
             maybe_cmd = cmd_rx.recv() => {
@@ -1582,7 +1618,7 @@ async fn run(
                                     api::fetch_channel_messages(&*rest_client, &config, channel_id, 50, None).await
                                 {
                                     messages.sort_by(|left, right| left.id.cmp(&right.id));
-                                    let _ = fetch_tx.send((channel_id, messages));
+                                    let _ = fetch_tx.send(InternalEvent::Messages(channel_id, messages));
                                 }
                             });
                         }
@@ -1852,6 +1888,15 @@ async fn run(
                     GatewayEvent::Ready { .. } => {
                         connection = ConnectionState::Ready;
                         error = None;
+                        if let Some(rest_client) = rest.clone() {
+                            let config = default_rest_config(&api_base, user_agent.as_deref(), active_token.clone());
+                            let fetch_tx = fetch_tx.clone();
+                            tokio::spawn(async move {
+                                if let Ok(channels) = api::channel::get_private_channels(&*rest_client, &config).await {
+                                    let _ = fetch_tx.send(InternalEvent::PrivateChannels(channels));
+                                }
+                            });
+                        }
                         if let Some(guild_id) = selected_guild_id {
                             subscribe_guild_members(guild_id, &cache, &gateway_outbound);
                         }

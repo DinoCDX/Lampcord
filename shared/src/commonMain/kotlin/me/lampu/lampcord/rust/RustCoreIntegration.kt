@@ -159,6 +159,7 @@ class RustCoreIntegration(
             }
             channels.forEach(entityStore::updateChannel)
             RustChannelVisibility.replaceHidden(snapshot.channels.filter { !it.canView }.map { it.id.toString() })
+            RustChannelVisibility.replaceReadOnly(snapshot.channels.filter { !it.canSend }.map { it.id.toString() })
             guildStore.setPrivateChannels(RustSnapshotMapper.mapPrivateChannels(snapshot))
         }
         if (membersChanged) {

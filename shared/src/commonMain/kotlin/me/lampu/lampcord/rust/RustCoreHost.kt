@@ -1,7 +1,10 @@
 package me.lampu.lampcord.rust
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.withContext
 import org.koin.compose.koinInject
 import me.lampu.lampcord.shared.settings.Settings
 import me.lampu.lampcord.shared.state.EntityStore
@@ -28,39 +31,42 @@ fun RustCoreHost() {
     val readStateStore: ReadStateStore = koinInject()
     val memberListStore: MemberListStore = koinInject()
 
-    DisposableEffect(sessionManager) {
-        val engine = try {
-            RustCoreEngine(RustClientConfig())
-        } catch (error: Throwable) {
-            Logging.e("RustCore", "RustCoreEngine init failed", error)
-            null
+    LaunchedEffect(sessionManager) {
+        val engine = withContext(Dispatchers.Default) {
+            try {
+                RustCoreEngine(RustClientConfig())
+            } catch (error: Throwable) {
+                Logging.e("RustCore", "RustCoreEngine init failed", error)
+                null
+            }
         }
         val token = Settings.shared.discordToken.trim().takeIf { it.isNotBlank() }
         if (engine == null) {
             Logging.w("RustCore", "Failed to start RustCoreEngine; falling back to Kotlin gateway")
             RustCoreMode.enabled = false
             if (token != null) sessionManager.connect(token)
-            onDispose {}
-        } else {
-            Logging.i("RustCore", "RustCoreEngine started")
-            val integration = RustCoreIntegration(
-                engine,
-                entityStore,
-                guildStore,
-                messageStore,
-                navigationStore,
-                userStore,
-                presenceStore,
-                readStateStore,
-                memberListStore,
-            )
+            return@LaunchedEffect
+        }
+        Logging.i("RustCore", "RustCoreEngine started")
+        val integration = RustCoreIntegration(
+            engine,
+            entityStore,
+            guildStore,
+            messageStore,
+            navigationStore,
+            userStore,
+            presenceStore,
+            readStateStore,
+            memberListStore,
+        )
+        try {
             integration.start()
             if (token != null) engine.connectToken(token) else engine.connectStoredToken()
-            onDispose {
-                integration.close()
-                engine.close()
-                Logging.i("RustCore", "RustCoreEngine stopped")
-            }
+            awaitCancellation()
+        } finally {
+            integration.close()
+            engine.close()
+            Logging.i("RustCore", "RustCoreEngine stopped")
         }
     }
 }

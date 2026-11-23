@@ -3,6 +3,8 @@ use serde_json::Value;
 
 pub const ADMINISTRATOR: u64 = 1 << 3;
 pub const VIEW_CHANNEL: u64 = 1 << 10;
+pub const SEND_MESSAGES: u64 = 1 << 11;
+pub const SEND_MESSAGES_IN_THREADS: u64 = 1 << 38;
 const ALL_PERMISSIONS: u64 = u64::MAX;
 const OVERWRITE_ROLE: u64 = 0;
 const OVERWRITE_MEMBER: u64 = 1;
@@ -37,6 +39,32 @@ pub fn can_view_channel(
     }
     let permissions = apply_overwrites(base, channel, guild.id, member_roles, user_id);
     permissions & VIEW_CHANNEL != 0
+}
+
+/// Whether the user can send messages in the channel. Threads use SEND_MESSAGES_IN_THREADS.
+pub fn can_send_messages(
+    guild: &Guild,
+    channel: &Channel,
+    member_roles: &[Snowflake],
+    user_id: Snowflake,
+) -> bool {
+    if channel.guild_id.is_none() || guild.roles.is_empty() {
+        return true;
+    }
+    if !can_view_channel(guild, channel, member_roles, user_id) {
+        return false;
+    }
+    let base = base_permissions(guild, member_roles, user_id);
+    if base & ADMINISTRATOR != 0 {
+        return true;
+    }
+    let permissions = apply_overwrites(base, channel, guild.id, member_roles, user_id);
+    let required = if channel.kind.is_thread() {
+        SEND_MESSAGES_IN_THREADS
+    } else {
+        SEND_MESSAGES
+    };
+    permissions & required != 0
 }
 
 fn role_permissions(guild: &Guild, role_id: Snowflake) -> u64 {
@@ -196,6 +224,19 @@ mod tests {
             serde_json::from_value(json!({"id": "1", "owner_id": "9"})).expect("guild");
         let private = channel(json!([{"id": "1", "type": 0, "allow": "0", "deny": "1024"}]));
         assert!(can_view_channel(&guild, &private, &[], id(2)));
+    }
+
+    #[test]
+    fn send_requires_the_send_messages_bit_after_overwrites() {
+        let readonly = channel(json!([
+            {"id": "1", "type": 0, "allow": "0", "deny": "2048"}
+        ]));
+        assert!(!can_send_messages(&guild(9), &readonly, &[], id(2)));
+
+        let writable = channel(json!([
+            {"id": "1", "type": 0, "allow": "2048", "deny": "0"}
+        ]));
+        assert!(can_send_messages(&guild(9), &writable, &[], id(2)));
     }
 
     #[test]

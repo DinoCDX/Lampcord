@@ -642,6 +642,12 @@ impl StateCache {
         }
     }
 
+    pub fn upsert_channels(&mut self, channels: Vec<Channel>) {
+        for channel in channels {
+            self.update_channel(channel);
+        }
+    }
+
     fn update_channel(&mut self, incoming: Channel) {
         let previous_guild_id = self
             .channels

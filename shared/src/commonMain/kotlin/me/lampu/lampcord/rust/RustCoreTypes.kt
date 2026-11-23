@@ -83,6 +83,7 @@ data class RustChannel(
     val canView: Boolean = true,
     val icon: String? = null,
     val recipients: List<RustRecipient> = emptyList(),
+    val canSend: Boolean = true,
 )
 
 data class RustRecipient(

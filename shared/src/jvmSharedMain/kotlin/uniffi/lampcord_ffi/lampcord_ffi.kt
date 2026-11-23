@@ -2545,6 +2545,7 @@ data class ChannelSnapshot (
     var `parentId`: kotlin.ULong?, 
     var `position`: kotlin.Int?, 
     var `canView`: kotlin.Boolean, 
+    var `canSend`: kotlin.Boolean, 
     var `icon`: kotlin.String?, 
     var `recipients`: List<RecipientSnapshot>
 ) {
@@ -2565,6 +2566,7 @@ public object FfiConverterTypeChannelSnapshot: FfiConverterRustBuffer<ChannelSna
             FfiConverterOptionalULong.read(buf),
             FfiConverterOptionalInt.read(buf),
             FfiConverterBoolean.read(buf),
+            FfiConverterBoolean.read(buf),
             FfiConverterOptionalString.read(buf),
             FfiConverterSequenceTypeRecipientSnapshot.read(buf),
         )
@@ -2578,6 +2580,7 @@ public object FfiConverterTypeChannelSnapshot: FfiConverterRustBuffer<ChannelSna
             FfiConverterOptionalULong.allocationSize(value.`parentId`) +
             FfiConverterOptionalInt.allocationSize(value.`position`) +
             FfiConverterBoolean.allocationSize(value.`canView`) +
+            FfiConverterBoolean.allocationSize(value.`canSend`) +
             FfiConverterOptionalString.allocationSize(value.`icon`) +
             FfiConverterSequenceTypeRecipientSnapshot.allocationSize(value.`recipients`)
     )
@@ -2590,6 +2593,7 @@ public object FfiConverterTypeChannelSnapshot: FfiConverterRustBuffer<ChannelSna
             FfiConverterOptionalULong.write(value.`parentId`, buf)
             FfiConverterOptionalInt.write(value.`position`, buf)
             FfiConverterBoolean.write(value.`canView`, buf)
+            FfiConverterBoolean.write(value.`canSend`, buf)
             FfiConverterOptionalString.write(value.`icon`, buf)
             FfiConverterSequenceTypeRecipientSnapshot.write(value.`recipients`, buf)
     }
