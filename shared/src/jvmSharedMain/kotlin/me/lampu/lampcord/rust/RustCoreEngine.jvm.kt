@@ -1,5 +1,6 @@
 package me.lampu.lampcord.rust
 
+import me.lampu.lampcord.shared.utils.Logging
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -98,8 +99,14 @@ actual class RustCoreEngine actual constructor(config: RustClientConfig) : AutoC
             .getOrDefault(emptyList())
             .map(::mapEvent)
 
-    actual fun connectToken(token: String): Boolean = runCatching { client.connectToken(token) }.isSuccess
-    actual fun connectStoredToken(): Boolean = runCatching { client.connectStoredToken() }.isSuccess
+    actual fun connectToken(token: String): Boolean =
+        runCatching { client.connectToken(token) }
+            .onFailure { Logging.w("RustCore", "connectToken failed: ${it.message}", it) }
+            .isSuccess
+    actual fun connectStoredToken(): Boolean =
+        runCatching { client.connectStoredToken() }
+            .onFailure { Logging.w("RustCore", "connectStoredToken failed: ${it.message}", it) }
+            .isSuccess
 
     actual fun loginPassword(login: String, password: String, captchaKey: String?): Boolean =
         runCatching { client.loginPassword(login, password, captchaKey) }.isSuccess

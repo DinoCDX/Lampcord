@@ -24,6 +24,7 @@ import me.lampu.lampcord.shared.state.RustCoreMode
 import me.lampu.lampcord.shared.state.RustCoreWriteGuard
 import me.lampu.lampcord.shared.state.UserStore
 import me.lampu.lampcord.shared.state.ReadStateStore
+import me.lampu.lampcord.shared.settings.Settings
 import me.lampu.lampcord.shared.utils.Logging
 
 class RustCoreIntegration(
@@ -209,6 +210,15 @@ class RustCoreIntegration(
             RustConnectionState.DISCONNECTED, RustConnectionState.ERROR -> {
                 navigationStore.isConnected = false
                 navigationStore.isConnecting = false
+                // A rejected token would otherwise leave the app on the loading screen, since
+                // the loading screen shows whenever a token is saved. Clear it and return to login.
+                if (snapshot.connection.state == RustConnectionState.ERROR &&
+                    snapshot.connection.message == "Authentication failed"
+                ) {
+                    Logging.w("RustCore", "Token rejected; returning to login")
+                    Settings.shared.discordToken = ""
+                    engine.logout()
+                }
             }
         }
 
@@ -230,7 +240,7 @@ class RustCoreIntegration(
     private fun handle(event: RustEvent) {
         when (event) {
             RustEvent.SnapshotUpdated -> Unit
-            is RustEvent.ConnectionChanged -> Unit
+            is RustEvent.ConnectionChanged -> Logging.i("RustCore", "connection changed: $event")
             is RustEvent.AuthChanged -> Logging.i("RustCore", "auth=${event.challenge}")
             is RustEvent.RemoteAuthChanged -> Logging.i("RustCore", "remoteAuth=${event.state}")
             is RustEvent.MessageUpdated -> {

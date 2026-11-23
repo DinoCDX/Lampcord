@@ -185,6 +185,9 @@ fn establish_session(
                 Ok(terminal) => terminal,
                 Err(error) => {
                     eprintln!("[lampcord-ffi] gateway error: {error}");
+                    let _ = gw_tx.send(GatewayEvent::Failed {
+                        message: error.to_string(),
+                    });
                     None
                 }
             };
@@ -1826,6 +1829,9 @@ async fn run(
                     }
                     GatewayEvent::Dispatch { event_type, data } => {
                         handle_dispatch(&event_type, data.as_deref(), &events, cache.as_ref());
+                    }
+                    GatewayEvent::Failed { message } => {
+                        push_event(&events, ClientEvent::Error { message });
                     }
                     GatewayEvent::HandlerErrors { errors } => {
                         for handler_error in errors {

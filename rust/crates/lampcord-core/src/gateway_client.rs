@@ -59,6 +59,10 @@ pub enum GatewayEvent {
     HandlerErrors {
         errors: Vec<crate::event_dispatch::HandlerError>,
     },
+    /// The connection attempt failed with an error (not a clean close). The core reconnects after this.
+    Failed {
+        message: String,
+    },
 }
 
 #[derive(Debug)]
