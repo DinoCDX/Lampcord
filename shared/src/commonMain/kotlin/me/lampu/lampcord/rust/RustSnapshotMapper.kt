@@ -15,7 +15,10 @@ import me.lampu.lampcord.shared.model.User
 object RustSnapshotMapper {
     fun mapGuilds(snapshot: RustSnapshot): List<Guild> = snapshot.guilds.map(::mapGuild)
 
-.map(::mapChannel)
+    fun mapChannels(snapshot: RustSnapshot): List<Channel> = snapshot.channels.map(::mapChannel)
+
+    fun mapPrivateChannels(snapshot: RustSnapshot): List<Channel> =
+        snapshot.channels.filter { it.guildId == null }.map(::mapChannel)
 
     fun mapChangedChannels(previous: RustSnapshot, current: RustSnapshot): List<Channel> =
         changedItems(previous.channels, current.channels, RustChannel::id).map(::mapChannel)
@@ -62,8 +65,6 @@ object RustSnapshotMapper {
 
     fun mapChangedAcknowledgements(previous: RustSnapshot, current: RustSnapshot): Map<String, String> =
         acknowledgements(changedItems(previous.readStates, current.readStates, RustReadState::channelId))
-
-            .toMap()
 
     fun mapMemberListItems(snapshot: RustSnapshot): List<MemberListListItem?> =
         snapshot.memberList.rows.map { row ->
