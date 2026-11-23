@@ -280,6 +280,7 @@ impl RuntimeHandle {
                 has_token: snapshot.has_token,
                 current_user_id: snapshot.current_user_id,
                 current_user: snapshot.current_user.clone(),
+                current_user_avatar: snapshot.current_user_avatar.clone(),
                 selected_guild_id: snapshot.selected_guild_id,
                 selected_channel_id: snapshot.selected_channel_id,
                 auth: snapshot.auth.clone(),
@@ -335,6 +336,7 @@ fn benchmark_snapshot() -> ClientSnapshot {
         has_token: true,
         current_user_id: Some(1),
         current_user: Some("bench".to_owned()),
+        current_user_avatar: None,
         selected_guild_id: Some(1),
         selected_channel_id: Some(1),
         guilds: (1..=50)
@@ -534,6 +536,7 @@ fn set_snapshot(
         || previous.has_token != next.has_token
         || previous.current_user_id != next.current_user_id
         || previous.current_user != next.current_user
+        || previous.current_user_avatar != next.current_user_avatar
         || previous.selected_guild_id != next.selected_guild_id
         || previous.selected_channel_id != next.selected_channel_id
         || previous.auth != next.auth
@@ -1016,6 +1019,7 @@ fn build_snapshot(
         has_token,
         current_user_id,
         current_user,
+        current_user_avatar: cache.current_user().and_then(|user| user.avatar.clone()),
         selected_guild_id,
         selected_channel_id,
         guilds,

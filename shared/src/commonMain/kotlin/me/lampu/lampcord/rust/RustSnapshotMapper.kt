@@ -15,13 +15,7 @@ import me.lampu.lampcord.shared.model.User
 object RustSnapshotMapper {
     fun mapGuilds(snapshot: RustSnapshot): List<Guild> = snapshot.guilds.map(::mapGuild)
 
-    fun mapChangedGuilds(previous: RustSnapshot, current: RustSnapshot): List<Guild> =
-        changedItems(previous.guilds, current.guilds, RustGuild::id).map(::mapGuild)
-
-    fun mapChannels(snapshot: RustSnapshot): List<Channel> = snapshot.channels.map(::mapChannel)
-
-    fun mapPrivateChannels(snapshot: RustSnapshot): List<Channel> =
-        snapshot.channels.filter { it.guildId == null }.map(::mapChannel)
+.map(::mapChannel)
 
     fun mapChangedChannels(previous: RustSnapshot, current: RustSnapshot): List<Channel> =
         changedItems(previous.channels, current.channels, RustChannel::id).map(::mapChannel)
@@ -69,9 +63,6 @@ object RustSnapshotMapper {
     fun mapChangedAcknowledgements(previous: RustSnapshot, current: RustSnapshot): Map<String, String> =
         acknowledgements(changedItems(previous.readStates, current.readStates, RustReadState::channelId))
 
-    fun mapReadStateMessageIds(snapshot: RustSnapshot): Map<String, String> =
-        snapshot.readStates
-            .mapNotNull { state -> state.lastMessageId?.let { state.channelId.toString() to it.toString() } }
             .toMap()
 
     fun mapMemberListItems(snapshot: RustSnapshot): List<MemberListListItem?> =

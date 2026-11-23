@@ -250,10 +250,14 @@ class RustCoreIntegration(
         if (lastUser?.relationships != snapshot.relationships) {
             relationshipStore.handleReady(RustSnapshotMapper.mapRelationships(snapshot))
         }
-        if (lastUser?.currentUserId != snapshot.currentUserId || lastUser?.currentUser != snapshot.currentUser) {
+        if (lastUser?.currentUserId != snapshot.currentUserId || lastUser?.currentUser != snapshot.currentUser ||
+            lastUser?.currentUserAvatar != snapshot.currentUserAvatar
+        ) {
             snapshot.currentUserId?.let { id ->
                 val name = snapshot.currentUser ?: id.toString()
-                userStore.setCurrentUser(User(id = id.toString(), username = name, global_name = name))
+                userStore.setCurrentUser(
+                    User(id = id.toString(), username = name, global_name = name, avatar = snapshot.currentUserAvatar)
+                )
             }
         }
 

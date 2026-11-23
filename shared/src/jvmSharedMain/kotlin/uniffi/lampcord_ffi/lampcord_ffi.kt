@@ -2684,6 +2684,7 @@ data class ClientSnapshot (
     var `hasToken`: kotlin.Boolean, 
     var `currentUserId`: kotlin.ULong?, 
     var `currentUser`: kotlin.String?, 
+    var `currentUserAvatar`: kotlin.String?, 
     var `selectedGuildId`: kotlin.ULong?, 
     var `selectedChannelId`: kotlin.ULong?, 
     var `guilds`: List<GuildSnapshot>, 
@@ -2713,6 +2714,7 @@ public object FfiConverterTypeClientSnapshot: FfiConverterRustBuffer<ClientSnaps
             FfiConverterBoolean.read(buf),
             FfiConverterOptionalULong.read(buf),
             FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
             FfiConverterOptionalULong.read(buf),
             FfiConverterOptionalULong.read(buf),
             FfiConverterSequenceTypeGuildSnapshot.read(buf),
@@ -2735,6 +2737,7 @@ public object FfiConverterTypeClientSnapshot: FfiConverterRustBuffer<ClientSnaps
             FfiConverterBoolean.allocationSize(value.`hasToken`) +
             FfiConverterOptionalULong.allocationSize(value.`currentUserId`) +
             FfiConverterOptionalString.allocationSize(value.`currentUser`) +
+            FfiConverterOptionalString.allocationSize(value.`currentUserAvatar`) +
             FfiConverterOptionalULong.allocationSize(value.`selectedGuildId`) +
             FfiConverterOptionalULong.allocationSize(value.`selectedChannelId`) +
             FfiConverterSequenceTypeGuildSnapshot.allocationSize(value.`guilds`) +
@@ -2756,6 +2759,7 @@ public object FfiConverterTypeClientSnapshot: FfiConverterRustBuffer<ClientSnaps
             FfiConverterBoolean.write(value.`hasToken`, buf)
             FfiConverterOptionalULong.write(value.`currentUserId`, buf)
             FfiConverterOptionalString.write(value.`currentUser`, buf)
+            FfiConverterOptionalString.write(value.`currentUserAvatar`, buf)
             FfiConverterOptionalULong.write(value.`selectedGuildId`, buf)
             FfiConverterOptionalULong.write(value.`selectedChannelId`, buf)
             FfiConverterSequenceTypeGuildSnapshot.write(value.`guilds`, buf)
@@ -3198,6 +3202,7 @@ data class SnapshotMetaPatch (
     var `hasToken`: kotlin.Boolean, 
     var `currentUserId`: kotlin.ULong?, 
     var `currentUser`: kotlin.String?, 
+    var `currentUserAvatar`: kotlin.String?, 
     var `selectedGuildId`: kotlin.ULong?, 
     var `selectedChannelId`: kotlin.ULong?, 
     var `auth`: AuthStateSnapshot, 
@@ -3217,6 +3222,7 @@ public object FfiConverterTypeSnapshotMetaPatch: FfiConverterRustBuffer<Snapshot
             FfiConverterBoolean.read(buf),
             FfiConverterOptionalULong.read(buf),
             FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
             FfiConverterOptionalULong.read(buf),
             FfiConverterOptionalULong.read(buf),
             FfiConverterTypeAuthStateSnapshot.read(buf),
@@ -3229,6 +3235,7 @@ public object FfiConverterTypeSnapshotMetaPatch: FfiConverterRustBuffer<Snapshot
             FfiConverterBoolean.allocationSize(value.`hasToken`) +
             FfiConverterOptionalULong.allocationSize(value.`currentUserId`) +
             FfiConverterOptionalString.allocationSize(value.`currentUser`) +
+            FfiConverterOptionalString.allocationSize(value.`currentUserAvatar`) +
             FfiConverterOptionalULong.allocationSize(value.`selectedGuildId`) +
             FfiConverterOptionalULong.allocationSize(value.`selectedChannelId`) +
             FfiConverterTypeAuthStateSnapshot.allocationSize(value.`auth`) +
@@ -3240,6 +3247,7 @@ public object FfiConverterTypeSnapshotMetaPatch: FfiConverterRustBuffer<Snapshot
             FfiConverterBoolean.write(value.`hasToken`, buf)
             FfiConverterOptionalULong.write(value.`currentUserId`, buf)
             FfiConverterOptionalString.write(value.`currentUser`, buf)
+            FfiConverterOptionalString.write(value.`currentUserAvatar`, buf)
             FfiConverterOptionalULong.write(value.`selectedGuildId`, buf)
             FfiConverterOptionalULong.write(value.`selectedChannelId`, buf)
             FfiConverterTypeAuthStateSnapshot.write(value.`auth`, buf)
