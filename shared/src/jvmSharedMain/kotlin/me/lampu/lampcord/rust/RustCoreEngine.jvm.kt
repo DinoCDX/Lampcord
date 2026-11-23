@@ -32,6 +32,7 @@ import uniffi.lampcord_ffi.LampcordClient
 import uniffi.lampcord_ffi.MemberListRowSnapshot as FfiMemberListRowSnapshot
 import uniffi.lampcord_ffi.MemberListSnapshot as FfiMemberListSnapshot
 import uniffi.lampcord_ffi.MemberSnapshot as FfiMemberSnapshot
+import uniffi.lampcord_ffi.RelationshipSnapshot as FfiRelationshipSnapshot
 import uniffi.lampcord_ffi.MessageSnapshot as FfiMessageSnapshot
 import uniffi.lampcord_ffi.PresenceSnapshot as FfiPresenceSnapshot
 import uniffi.lampcord_ffi.PlatformSecretStore
@@ -266,6 +267,15 @@ private fun mapMemberListRow(value: FfiMemberListRowSnapshot): RustMemberListRow
     member = value.member?.let(::mapMember),
 )
 
+private fun mapRelationship(value: FfiRelationshipSnapshot): RustRelationship = RustRelationship(
+    userId = value.userId,
+    kind = value.kind.toInt(),
+    username = value.username,
+    globalName = value.globalName,
+    avatar = value.avatar,
+    avatarDecoration = value.avatarDecoration,
+)
+
 private fun mapMemberList(value: FfiMemberListSnapshot): RustMemberList = RustMemberList(
     rows = value.rows.map(::mapMemberListRow),
     onlineCount = value.onlineCount?.toInt(),
@@ -324,6 +334,7 @@ private fun mapSnapshot(
     presences = value.presences.map(::mapPresence),
     readStates = value.readStates.map(::mapReadState),
     memberList = mapMemberList(value.memberList),
+    relationships = value.relationships.map(::mapRelationship),
     auth = mapAuthState(value.auth),
     error = value.error,
     versions = mapVersions(versions),
@@ -347,6 +358,7 @@ private fun mapSnapshotPatch(value: FfiSnapshotPatch, previous: RustSnapshot): R
         presences = value.presences?.map(::mapPresence) ?: previous.presences,
         readStates = value.readStates?.map(::mapReadState) ?: previous.readStates,
         memberList = value.memberList?.let(::mapMemberList) ?: previous.memberList,
+        relationships = value.relationships.map(::mapRelationship),
         auth = meta?.auth ?: previous.auth,
         error = meta?.error ?: previous.error,
         versions = mapVersions(value.versions),

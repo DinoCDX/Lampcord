@@ -3,11 +3,13 @@ package me.lampu.lampcord.rust
 import me.lampu.lampcord.shared.model.Activity
 import me.lampu.lampcord.shared.model.Channel
 import me.lampu.lampcord.shared.model.Guild
+import me.lampu.lampcord.shared.model.AvatarDecorationData
 import me.lampu.lampcord.shared.model.Member
 import me.lampu.lampcord.shared.model.MemberListGroup
 import me.lampu.lampcord.shared.model.MemberListListItem
 import me.lampu.lampcord.shared.model.Message
 import me.lampu.lampcord.shared.model.PresenceUpdate
+import me.lampu.lampcord.shared.model.Relationship
 import me.lampu.lampcord.shared.model.User
 
 object RustSnapshotMapper {
@@ -99,6 +101,23 @@ object RustSnapshotMapper {
             )
         },
     )
+
+    fun mapRelationships(snapshot: RustSnapshot): List<Relationship> =
+        snapshot.relationships.map { relationship ->
+            val id = relationship.userId.toString()
+            Relationship(
+                id = id,
+                type = relationship.kind,
+                user = User(
+                    id = id,
+                    username = relationship.username,
+                    global_name = relationship.globalName,
+                    avatar = relationship.avatar,
+                    avatar_decoration = relationship.avatarDecoration?.let { AvatarDecorationData(asset = it) },
+                ),
+                user_id = id,
+            )
+        }
 
     private const val ROW_GROUP = 1
     private const val ROW_MEMBER = 2

@@ -168,6 +168,7 @@ data class RustSnapshot(
     val auth: RustAuthState,
     val error: String?,
     val memberList: RustMemberList = RustMemberList(),
+    val relationships: List<RustRelationship> = emptyList(),
     val versions: RustSnapshotVersions = RustSnapshotVersions(),
 )
 
@@ -230,4 +231,13 @@ data class RustEventEnvelope(
     val sequence: ULong,
     val emittedAtMs: ULong,
     val event: RustEvent,
+)
+
+data class RustRelationship(
+    val userId: ULong,
+    val kind: Int,
+    val username: String,
+    val globalName: String?,
+    val avatar: String?,
+    val avatarDecoration: String?,
 )

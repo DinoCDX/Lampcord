@@ -225,6 +225,7 @@ fun main() {
                     val presenceStore: PresenceStore = koinInject()
                     val readStateStore: ReadStateStore = koinInject()
                     val memberListStore: MemberListStore = koinInject()
+                    val relationshipStore: me.lampu.lampcord.shared.state.RelationshipStore = koinInject()
                     DisposableEffect(sessionManager) {
                         val engine = try {
                             RustCoreEngine(RustClientConfig(storagePath = "${me.lampu.lampcord.shared.utils.getAppStoragePath()}/lampcord-accounts.json"))
@@ -251,6 +252,7 @@ fun main() {
                                 presenceStore,
                                 readStateStore,
                                 memberListStore,
+                                relationshipStore,
                             )
                             integration.start()
                             val token = Settings.shared.discordToken.trim().takeIf { it.isNotBlank() }

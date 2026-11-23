@@ -36,7 +36,8 @@ use crate::{
         MAX_SNAPSHOT_PRESENCES, MAX_SNAPSHOT_READ_STATES, MEMBER_LIST_ROW_GROUP,
         MEMBER_LIST_ROW_MEMBER, MEMBER_LIST_ROW_PENDING, MemberListRowSnapshot, MemberListSnapshot,
         MemberSnapshot, MessageSnapshot, PresenceSnapshot, ReadStateSnapshot, RecipientSnapshot,
-        SNAPSHOT_SCHEMA_VERSION, SnapshotMetaPatch, SnapshotPatch, SnapshotVersions,
+        RelationshipSnapshot, SNAPSHOT_SCHEMA_VERSION, SnapshotMetaPatch, SnapshotPatch,
+        SnapshotVersions,
     },
     types::{
         AuthChallenge, AuthFailureKind, ClientCommand, ClientConfig, ClientEvent,
@@ -48,6 +49,9 @@ const MAX_EVENT_QUEUE: usize = 512;
 const EVENT_DROP_BATCH: usize = 64;
 const SNAPSHOT_COALESCE: Duration = Duration::from_millis(32);
 const SNAPSHOT_DISPATCH_EVENTS: &[&str] = &[
+    "RELATIONSHIP_ADD",
+    "RELATIONSHIP_UPDATE",
+    "RELATIONSHIP_REMOVE",
     "USER_SETTINGS_UPDATE",
     "GUILD_MEMBER_LIST_UPDATE",
     "MESSAGE_CREATE",
@@ -289,6 +293,7 @@ impl RuntimeHandle {
             read_states: (versions.read_states > since.read_states)
                 .then(|| snapshot.read_states.clone()),
             member_list: (versions.members > since.members).then(|| snapshot.member_list.clone()),
+            relationships: snapshot.relationships.clone(),
         }
     }
 
@@ -769,6 +774,28 @@ fn member_list_snapshot(cache: &StateCache, guild_id: Option<Snowflake>) -> Memb
     }
 }
 
+fn relationships_snapshot(cache: &StateCache) -> Vec<RelationshipSnapshot> {
+    cache
+        .relationship_entries()
+        .into_iter()
+        .map(|relationship| {
+            let user = cache.user(relationship.user_id);
+            RelationshipSnapshot {
+                user_id: relationship.user_id,
+                kind: relationship.kind,
+                username: user.map(|user| user.username.clone()).unwrap_or_default(),
+                global_name: user.and_then(|user| user.global_name.clone()),
+                avatar: user.and_then(|user| user.avatar.clone()),
+                avatar_decoration: user
+                    .and_then(|user| user.avatar_decoration_data.as_ref())
+                    .and_then(|data| data.get("asset"))
+                    .and_then(Value::as_str)
+                    .map(str::to_owned),
+            }
+        })
+        .collect()
+}
+
 fn pending_row() -> MemberListRowSnapshot {
     MemberListRowSnapshot {
         kind: MEMBER_LIST_ROW_PENDING,
@@ -998,6 +1025,7 @@ fn build_snapshot(
         presences,
         read_states,
         member_list: member_list_snapshot(&cache, selected_guild_id),
+        relationships: relationships_snapshot(&cache),
         auth: auth.clone(),
         error,
     }
@@ -1236,7 +1264,7 @@ async fn run(
     let gateway_url_override = config.gateway_url.clone();
     let captcha_solver = ConfigurableCaptchaSolver::default();
     let seq = Arc::new(AtomicU64::new(0));
-    let mut snapshot_dirty = false;
+    let mut snapshot_dirty = true;
     let mut last_publish = Instant::now();
     let mut flush_ticker = tokio::time::interval(SNAPSHOT_COALESCE);
     flush_ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);

@@ -2693,6 +2693,7 @@ data class ClientSnapshot (
     var `presences`: List<PresenceSnapshot>, 
     var `readStates`: List<ReadStateSnapshot>, 
     var `memberList`: MemberListSnapshot, 
+    var `relationships`: List<RelationshipSnapshot>, 
     var `auth`: AuthStateSnapshot, 
     var `error`: kotlin.String?
 ) {
@@ -2721,6 +2722,7 @@ public object FfiConverterTypeClientSnapshot: FfiConverterRustBuffer<ClientSnaps
             FfiConverterSequenceTypePresenceSnapshot.read(buf),
             FfiConverterSequenceTypeReadStateSnapshot.read(buf),
             FfiConverterTypeMemberListSnapshot.read(buf),
+            FfiConverterSequenceTypeRelationshipSnapshot.read(buf),
             FfiConverterTypeAuthStateSnapshot.read(buf),
             FfiConverterOptionalString.read(buf),
         )
@@ -2742,6 +2744,7 @@ public object FfiConverterTypeClientSnapshot: FfiConverterRustBuffer<ClientSnaps
             FfiConverterSequenceTypePresenceSnapshot.allocationSize(value.`presences`) +
             FfiConverterSequenceTypeReadStateSnapshot.allocationSize(value.`readStates`) +
             FfiConverterTypeMemberListSnapshot.allocationSize(value.`memberList`) +
+            FfiConverterSequenceTypeRelationshipSnapshot.allocationSize(value.`relationships`) +
             FfiConverterTypeAuthStateSnapshot.allocationSize(value.`auth`) +
             FfiConverterOptionalString.allocationSize(value.`error`)
     )
@@ -2762,6 +2765,7 @@ public object FfiConverterTypeClientSnapshot: FfiConverterRustBuffer<ClientSnaps
             FfiConverterSequenceTypePresenceSnapshot.write(value.`presences`, buf)
             FfiConverterSequenceTypeReadStateSnapshot.write(value.`readStates`, buf)
             FfiConverterTypeMemberListSnapshot.write(value.`memberList`, buf)
+            FfiConverterSequenceTypeRelationshipSnapshot.write(value.`relationships`, buf)
             FfiConverterTypeAuthStateSnapshot.write(value.`auth`, buf)
             FfiConverterOptionalString.write(value.`error`, buf)
     }
@@ -3141,6 +3145,54 @@ public object FfiConverterTypeRecipientSnapshot: FfiConverterRustBuffer<Recipien
 
 
 
+data class RelationshipSnapshot (
+    var `userId`: kotlin.ULong, 
+    var `kind`: kotlin.UByte, 
+    var `username`: kotlin.String, 
+    var `globalName`: kotlin.String?, 
+    var `avatar`: kotlin.String?, 
+    var `avatarDecoration`: kotlin.String?
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeRelationshipSnapshot: FfiConverterRustBuffer<RelationshipSnapshot> {
+    override fun read(buf: ByteBuffer): RelationshipSnapshot {
+        return RelationshipSnapshot(
+            FfiConverterULong.read(buf),
+            FfiConverterUByte.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: RelationshipSnapshot) = (
+            FfiConverterULong.allocationSize(value.`userId`) +
+            FfiConverterUByte.allocationSize(value.`kind`) +
+            FfiConverterString.allocationSize(value.`username`) +
+            FfiConverterOptionalString.allocationSize(value.`globalName`) +
+            FfiConverterOptionalString.allocationSize(value.`avatar`) +
+            FfiConverterOptionalString.allocationSize(value.`avatarDecoration`)
+    )
+
+    override fun write(value: RelationshipSnapshot, buf: ByteBuffer) {
+            FfiConverterULong.write(value.`userId`, buf)
+            FfiConverterUByte.write(value.`kind`, buf)
+            FfiConverterString.write(value.`username`, buf)
+            FfiConverterOptionalString.write(value.`globalName`, buf)
+            FfiConverterOptionalString.write(value.`avatar`, buf)
+            FfiConverterOptionalString.write(value.`avatarDecoration`, buf)
+    }
+}
+
+
+
 data class SnapshotMetaPatch (
     var `connection`: ConnectionState, 
     var `hasToken`: kotlin.Boolean, 
@@ -3208,7 +3260,8 @@ data class SnapshotPatch (
     var `members`: List<MemberSnapshot>?, 
     var `presences`: List<PresenceSnapshot>?, 
     var `readStates`: List<ReadStateSnapshot>?, 
-    var `memberList`: MemberListSnapshot?
+    var `memberList`: MemberListSnapshot?, 
+    var `relationships`: List<RelationshipSnapshot>
 ) {
     
     companion object
@@ -3231,6 +3284,7 @@ public object FfiConverterTypeSnapshotPatch: FfiConverterRustBuffer<SnapshotPatc
             FfiConverterOptionalSequenceTypePresenceSnapshot.read(buf),
             FfiConverterOptionalSequenceTypeReadStateSnapshot.read(buf),
             FfiConverterOptionalTypeMemberListSnapshot.read(buf),
+            FfiConverterSequenceTypeRelationshipSnapshot.read(buf),
         )
     }
 
@@ -3245,7 +3299,8 @@ public object FfiConverterTypeSnapshotPatch: FfiConverterRustBuffer<SnapshotPatc
             FfiConverterOptionalSequenceTypeMemberSnapshot.allocationSize(value.`members`) +
             FfiConverterOptionalSequenceTypePresenceSnapshot.allocationSize(value.`presences`) +
             FfiConverterOptionalSequenceTypeReadStateSnapshot.allocationSize(value.`readStates`) +
-            FfiConverterOptionalTypeMemberListSnapshot.allocationSize(value.`memberList`)
+            FfiConverterOptionalTypeMemberListSnapshot.allocationSize(value.`memberList`) +
+            FfiConverterSequenceTypeRelationshipSnapshot.allocationSize(value.`relationships`)
     )
 
     override fun write(value: SnapshotPatch, buf: ByteBuffer) {
@@ -3260,6 +3315,7 @@ public object FfiConverterTypeSnapshotPatch: FfiConverterRustBuffer<SnapshotPatc
             FfiConverterOptionalSequenceTypePresenceSnapshot.write(value.`presences`, buf)
             FfiConverterOptionalSequenceTypeReadStateSnapshot.write(value.`readStates`, buf)
             FfiConverterOptionalTypeMemberListSnapshot.write(value.`memberList`, buf)
+            FfiConverterSequenceTypeRelationshipSnapshot.write(value.`relationships`, buf)
     }
 }
 
@@ -5596,6 +5652,34 @@ public object FfiConverterSequenceTypeRecipientSnapshot: FfiConverterRustBuffer<
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeRecipientSnapshot.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeRelationshipSnapshot: FfiConverterRustBuffer<List<RelationshipSnapshot>> {
+    override fun read(buf: ByteBuffer): List<RelationshipSnapshot> {
+        val len = buf.getInt()
+        return List<RelationshipSnapshot>(len) {
+            FfiConverterTypeRelationshipSnapshot.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<RelationshipSnapshot>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeRelationshipSnapshot.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<RelationshipSnapshot>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeRelationshipSnapshot.write(it, buf)
         }
     }
 }

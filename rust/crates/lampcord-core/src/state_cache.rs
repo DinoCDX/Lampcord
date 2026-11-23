@@ -1114,6 +1114,10 @@ impl PersistedCache {
 }
 
 impl StateCache {
+    pub fn relationship_entries(&self) -> Vec<CachedRelationship> {
+        self.relationships.values().cloned().collect()
+    }
+
     pub fn take_persisted_if_dirty(&mut self) -> Option<PersistedCache> {
         if !self.dirty {
             return None;

@@ -26,6 +26,7 @@ pub struct ClientSnapshot {
     pub presences: Vec<PresenceSnapshot>,
     pub read_states: Vec<ReadStateSnapshot>,
     pub member_list: MemberListSnapshot,
+    pub relationships: Vec<RelationshipSnapshot>,
     pub auth: AuthStateSnapshot,
     pub error: Option<String>,
 }
@@ -70,6 +71,7 @@ pub struct SnapshotPatch {
     pub presences: Option<Vec<PresenceSnapshot>>,
     pub read_states: Option<Vec<ReadStateSnapshot>>,
     pub member_list: Option<MemberListSnapshot>,
+    pub relationships: Vec<RelationshipSnapshot>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -134,6 +136,17 @@ pub struct MemberSnapshot {
     pub nickname: Option<String>,
     pub roles: Vec<u64>,
     pub status: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct RelationshipSnapshot {
+    pub user_id: u64,
+    pub kind: u8,
+    pub username: String,
+    pub global_name: Option<String>,
+    pub avatar: Option<String>,
+    pub avatar_decoration: Option<String>,
 }
 
 pub const MEMBER_LIST_ROW_PENDING: u8 = 0;

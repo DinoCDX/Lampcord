@@ -16,6 +16,7 @@ import me.lampu.lampcord.shared.model.PresenceUpdate
 import me.lampu.lampcord.shared.model.User
 import me.lampu.lampcord.shared.state.EntityStore
 import me.lampu.lampcord.shared.state.MemberListStore
+import me.lampu.lampcord.shared.state.RelationshipStore
 import me.lampu.lampcord.shared.state.GuildStore
 import me.lampu.lampcord.shared.state.MessageStore
 import me.lampu.lampcord.shared.state.NavigationStore
@@ -38,6 +39,7 @@ class RustCoreIntegration(
     private val presenceStore: PresenceStore,
     private val readStateStore: ReadStateStore,
     private val memberListStore: MemberListStore,
+    private val relationshipStore: RelationshipStore,
 ) : AutoCloseable {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var job: Job? = null
@@ -245,6 +247,9 @@ class RustCoreIntegration(
         }
 
         val lastUser = lastInjectedSnapshot
+        if (lastUser?.relationships != snapshot.relationships) {
+            relationshipStore.handleReady(RustSnapshotMapper.mapRelationships(snapshot))
+        }
         if (lastUser?.currentUserId != snapshot.currentUserId || lastUser?.currentUser != snapshot.currentUser) {
             snapshot.currentUserId?.let { id ->
                 val name = snapshot.currentUser ?: id.toString()

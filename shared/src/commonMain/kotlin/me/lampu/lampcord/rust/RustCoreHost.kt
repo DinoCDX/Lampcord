@@ -14,6 +14,7 @@ import me.lampu.lampcord.shared.state.MessageStore
 import me.lampu.lampcord.shared.state.NavigationStore
 import me.lampu.lampcord.shared.state.PresenceStore
 import me.lampu.lampcord.shared.state.ReadStateStore
+import me.lampu.lampcord.shared.state.RelationshipStore
 import me.lampu.lampcord.shared.state.RustCoreMode
 import me.lampu.lampcord.shared.state.SessionManager
 import me.lampu.lampcord.shared.state.UserStore
@@ -31,6 +32,7 @@ fun RustCoreHost() {
     val presenceStore: PresenceStore = koinInject()
     val readStateStore: ReadStateStore = koinInject()
     val memberListStore: MemberListStore = koinInject()
+    val relationshipStore: RelationshipStore = koinInject()
 
     LaunchedEffect(sessionManager) {
         val engine = withContext(Dispatchers.Default) {
@@ -59,6 +61,7 @@ fun RustCoreHost() {
             presenceStore,
             readStateStore,
             memberListStore,
+            relationshipStore,
         )
         try {
             integration.start()
