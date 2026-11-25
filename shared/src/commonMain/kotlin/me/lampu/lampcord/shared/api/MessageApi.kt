@@ -421,18 +421,18 @@ class MessageApi(private val rest: RestClient) {
         }
     }
 
-    suspend fun votePollAnswers(channelId: String, messageId: String, answerIds: Set<Int>): Message? {
+    suspend fun votePollAnswers(channelId: String, messageId: String, answerIds: Set<Int>): Boolean {
         return try {
             val response = rest.httpClient.put("${rest.apiBase}/channels/$channelId/polls/$messageId/answers/@me") {
                 standardHeaders(rest)
                 contentType(ContentType.Application.Json)
                 setBody(PollVoteRequest(answer_ids = answerIds.toList()))
             }
-            if (response.status.isSuccess()) response.body() else null
+            response.status.isSuccess()
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             Logging.e("Poll", "Error voting on poll $messageId: ${e.message}")
-            null
+            false
         }
     }
 
