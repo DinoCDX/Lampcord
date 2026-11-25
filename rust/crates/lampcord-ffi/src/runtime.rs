@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     sync::{
-        Arc, Mutex,
+        Arc, Mutex, OnceLock,
         atomic::{AtomicU64, Ordering},
     },
     thread,
@@ -17,7 +17,7 @@ use lampcord_core::{
     gateway_client::{GatewayClient, GatewayEvent, lazy_request_payload},
     gateway_plan::reconnect_delay_ms,
     remote_auth::{self, RemoteAuthState as CoreRemoteAuthState},
-    rest::RestConfig,
+    rest::{DESKTOP_USER_AGENT, RestConfig},
     rest_client::RestClient,
     secret_store::{FileSecretStore, SecretStore},
     state_cache::{CachedPresence, MemberListRow, PersistedCache, StateCache},
@@ -32,12 +32,13 @@ use tokio::sync::{mpsc, oneshot, watch};
 use crate::{
     error::FfiErrorKind,
     snapshot::{
-        AuthStateSnapshot, ChannelSnapshot, ClientSnapshot, GuildSnapshot, MAX_SNAPSHOT_MEMBERS,
-        MAX_SNAPSHOT_PRESENCES, MAX_SNAPSHOT_READ_STATES, MEMBER_LIST_ROW_GROUP,
+        AttachmentSnapshot, AuthStateSnapshot, BadgeSnapshot, ChannelSnapshot, ClientSnapshot,
+        GuildFolderSnapshot, GuildSnapshot, MAX_SNAPSHOT_MEMBERS, MAX_SNAPSHOT_PRESENCES,
+        MAX_SNAPSHOT_PRIVATE_CHANNELS, MAX_SNAPSHOT_READ_STATES, MEMBER_LIST_ROW_GROUP,
         MEMBER_LIST_ROW_MEMBER, MEMBER_LIST_ROW_PENDING, MemberListRowSnapshot, MemberListSnapshot,
-        MemberSnapshot, MessageSnapshot, PresenceSnapshot, ReadStateSnapshot, RecipientSnapshot,
-        RelationshipSnapshot, SNAPSHOT_SCHEMA_VERSION, SnapshotMetaPatch, SnapshotPatch,
-        SnapshotVersions,
+        MemberSnapshot, MessageSnapshot, PresenceSnapshot, PrivateChannelSnapshot, ProfileSnapshot,
+        ReadStateSnapshot, RecipientSnapshot, RelationshipSnapshot, ReplySnapshot,
+        SNAPSHOT_SCHEMA_VERSION, SnapshotMetaPatch, SnapshotPatch, SnapshotVersions,
     },
     types::{
         AuthChallenge, AuthFailureKind, ClientCommand, ClientConfig, ClientEvent,
@@ -128,36 +129,195 @@ enum InternalEvent {
     PrivateChannels(Vec<Channel>),
 }
 
+static INSTALLATION_ID: OnceLock<String> = OnceLock::new();
+static SUPER_PROPERTIES: OnceLock<String> = OnceLock::new();
+
+fn unix_nanos() -> u128 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or_default()
+}
+
+fn random_uuid() -> String {
+    let mixed = unix_nanos() ^ ((std::process::id() as u128) << 64);
+    let b = mixed.to_le_bytes();
+    format!(
+        "{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-4{:02x}{:01x}-a{:02x}{:01x}-\
+         {:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
+        b[0],
+        b[1],
+        b[2],
+        b[3],
+        b[4],
+        b[5],
+        b[6],
+        b[7] >> 4,
+        b[8],
+        b[9] >> 4,
+        b[10],
+        b[11],
+        b[12],
+        b[13],
+        b[14],
+        b[15]
+    )
+}
+
+fn installation_id() -> &'static str {
+    INSTALLATION_ID.get_or_init(random_uuid)
+}
+
+#[cfg(target_os = "android")]
+fn android_property(name: &str) -> Option<String> {
+    let output = std::process::Command::new("getprop")
+        .arg(name)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let value = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+    (!value.is_empty()).then_some(value)
+}
+
+fn os_version() -> String {
+    #[cfg(target_os = "android")]
+    {
+        android_property("ro.build.version.release").unwrap_or_else(|| "unknown".to_owned())
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        std::fs::read_to_string("/proc/sys/kernel/osrelease")
+            .ok()
+            .map(|value| value.trim().to_owned())
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| std::env::consts::OS.to_owned())
+    }
+}
+
+fn device_name() -> String {
+    #[cfg(target_os = "android")]
+    {
+        let model = android_property("ro.product.model").unwrap_or_default();
+        let product = android_property("ro.product.build.product")
+            .or_else(|| android_property("ro.product.device"))
+            .unwrap_or_default();
+        format!("{model}, {product}")
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        "Desktop".to_owned()
+    }
+}
+
+fn desktop_os_name() -> String {
+    match std::env::consts::OS {
+        "macos" => "Mac OS X".to_owned(),
+        "windows" => "Windows".to_owned(),
+        os => {
+            let mut chars = os.chars();
+            match chars.next() {
+                Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+                None => os.to_owned(),
+            }
+        }
+    }
+}
+
+fn system_timezone() -> String {
+    if let Ok(tz) = std::env::var("TZ") {
+        if !tz.is_empty() {
+            return tz;
+        }
+    }
+    if let Ok(tz) = std::fs::read_to_string("/etc/timezone") {
+        let tz = tz.trim();
+        if !tz.is_empty() {
+            return tz.to_owned();
+        }
+    }
+    "UTC".to_owned()
+}
+
+// Discord checks X-Super-Properties during MFA. The old placeholder build
+// number and device strings are rejected as an invalid code even when the TOTP
+// value is correct, so mirror the properties the Kotlin client sends.
+fn super_properties() -> &'static str {
+    SUPER_PROPERTIES.get_or_init(|| {
+        let mobile = cfg!(target_os = "android");
+        let vendor_id = random_uuid();
+        let value = if mobile {
+            serde_json::json!({
+                "os": "Android",
+                "browser": "Discord Android",
+                "device": device_name(),
+                "system_locale": "en-US",
+                "has_client_mods": false,
+                "client_version": "341.0 - rn",
+                "release_channel": "canaryRelease",
+                "device_vendor_id": vendor_id,
+                "design_id": 2,
+                "browser_user_agent": "Discord-Android/341200;RNA",
+                "browser_version": "",
+                "os_version": os_version(),
+                "client_build_number": 6081,
+                "client_event_source": null,
+                "client_launch_id": random_uuid(),
+                "launch_signature": unix_nanos().to_string(),
+                "client_app_state": "active",
+                "client_heartbeat_session_id": random_uuid()
+            })
+        } else {
+            serde_json::json!({
+                "os": desktop_os_name(),
+                "browser": "Discord Client",
+                "device": "Desktop",
+                "system_locale": "en-US",
+                "has_client_mods": false,
+                "client_version": "0.0.398",
+                "release_channel": "stable",
+                "device_vendor_id": vendor_id,
+                "design_id": 2,
+                "browser_user_agent": "",
+                "browser_version": "37.6.0",
+                "os_version": os_version(),
+                "client_build_number": 575562,
+                "client_event_source": null,
+                "client_launch_id": null,
+                "launch_signature": "",
+                "client_app_state": null,
+                "client_heartbeat_session_id": null
+            })
+        };
+        base64::engine::general_purpose::STANDARD.encode(value.to_string().as_bytes())
+    })
+}
+
+fn default_user_agent() -> &'static str {
+    if cfg!(target_os = "android") {
+        "Discord-Android/341200;RNA"
+    } else {
+        DESKTOP_USER_AGENT
+    }
+}
+
 fn default_rest_config(
     api_base: &str,
     user_agent: Option<&str>,
     token: Option<String>,
 ) -> RestConfig {
-    let super_properties = serde_json::json!({
-        "os": "Linux",
-        "browser": "Discord Client",
-        "device": "lampcord-ffi",
-        "system_locale": "en-US",
-        "has_client_mods": false,
-        "release_channel": "stable",
-        "client_version": "0.0.0",
-        "os_version": "",
-        "browser_user_agent": "",
-        "browser_version": "",
-        "device_vendor_id": "",
-        "client_build_number": 0
-    });
-    let encoded =
-        base64::engine::general_purpose::STANDARD.encode(super_properties.to_string().as_bytes());
     let mut config = RestConfig::new(
         token,
-        encoded,
-        "lampcord-ffi-installation".to_owned(),
-        "UTC".to_owned(),
+        super_properties(),
+        installation_id(),
+        system_timezone(),
     )
     .with_api_base(api_base.to_owned());
     if let Some(user_agent) = user_agent.filter(|agent| !agent.is_empty()) {
         config = config.with_user_agent(user_agent.to_owned());
+    } else {
+        config = config.with_user_agent(default_user_agent());
     }
     config
 }
@@ -184,7 +344,7 @@ fn establish_session(
         .with_outbound(out_rx);
     let cache = client.cache().clone();
     let (gw_tx, gw_rx) = mpsc::unbounded_channel();
-    let token = token.to_owned();
+    let mut token = token.to_owned();
     let task = tokio::spawn(async move {
         let mut attempt: u32 = 0;
         loop {
@@ -199,6 +359,9 @@ fn establish_session(
                     None
                 }
             };
+            if let Some(refreshed) = client.take_refreshed_token() {
+                token = refreshed;
+            }
             let reconnect = match terminal {
                 Some(GatewayEvent::AuthFailed { .. }) => false,
                 Some(GatewayEvent::Closed { code })
@@ -281,6 +444,11 @@ impl RuntimeHandle {
                 current_user_id: snapshot.current_user_id,
                 current_user: snapshot.current_user.clone(),
                 current_user_avatar: snapshot.current_user_avatar.clone(),
+                current_user_status: snapshot.current_user_status.clone(),
+                current_user_custom_status: snapshot.current_user_custom_status.clone(),
+                current_user_decoration: snapshot.current_user_decoration.clone(),
+                current_user_nameplate: snapshot.current_user_nameplate.clone(),
+                profile: snapshot.profile.clone(),
                 selected_guild_id: snapshot.selected_guild_id,
                 selected_channel_id: snapshot.selected_channel_id,
                 auth: snapshot.auth.clone(),
@@ -289,10 +457,16 @@ impl RuntimeHandle {
             guilds: (versions.guilds > since.guilds).then(|| snapshot.guilds.clone()),
             channels: (versions.channels > since.channels).then(|| snapshot.channels.clone()),
             messages: (versions.messages > since.messages).then(|| snapshot.messages.clone()),
+            pinned_messages: (versions.messages > since.messages)
+                .then(|| snapshot.pinned_messages.clone()),
+            mentions: (versions.messages > since.messages).then(|| snapshot.mentions.clone()),
             members: (versions.members > since.members).then(|| snapshot.members.clone()),
             presences: (versions.presences > since.presences).then(|| snapshot.presences.clone()),
             read_states: (versions.read_states > since.read_states)
                 .then(|| snapshot.read_states.clone()),
+            private_channels: (versions.channels > since.channels)
+                .then(|| snapshot.private_channels.clone()),
+            guild_folders: (versions.guilds > since.guilds).then(|| snapshot.guild_folders.clone()),
             member_list: (versions.members > since.members).then(|| snapshot.member_list.clone()),
             relationships: snapshot.relationships.clone(),
         }
@@ -354,6 +528,10 @@ fn benchmark_snapshot() -> ClientSnapshot {
                 kind: 0,
                 parent_id: None,
                 position: Some((id % 20) as i32),
+                can_view: true,
+                can_send: true,
+                icon: None,
+                recipients: Vec::new(),
             })
             .collect(),
         messages: (1..=200)
@@ -366,6 +544,10 @@ fn benchmark_snapshot() -> ClientSnapshot {
                 content: format!("benchmark message {id}"),
                 timestamp: "2026-01-01T00:00:00Z".to_owned(),
                 edited_timestamp: None,
+                kind: 0,
+                author_decoration: None,
+                attachments: Vec::new(),
+                reply: None,
             })
             .collect(),
         members: (1..=200)
@@ -377,6 +559,9 @@ fn benchmark_snapshot() -> ClientSnapshot {
                 nickname: None,
                 roles: vec![1, 2, 3],
                 status: Some("online".to_owned()),
+                global_name: None,
+                decoration: None,
+                nameplate: None,
             })
             .collect(),
         presences: (1..=200)
@@ -384,6 +569,8 @@ fn benchmark_snapshot() -> ClientSnapshot {
                 user_id: id,
                 status: "online".to_owned(),
                 activities: vec!["Compose".to_owned()],
+                custom_status: None,
+                mobile: false,
             })
             .collect(),
         read_states: (1..=200)
@@ -397,6 +584,17 @@ fn benchmark_snapshot() -> ClientSnapshot {
             .collect(),
         auth: AuthStateSnapshot::default(),
         error: None,
+        private_channels: Vec::new(),
+        guild_folders: Vec::new(),
+        member_list: MemberListSnapshot::default(),
+        relationships: Vec::new(),
+        current_user_status: None,
+        current_user_custom_status: None,
+        current_user_decoration: None,
+        current_user_nameplate: None,
+        profile: None,
+        pinned_messages: Vec::new(),
+        mentions: Vec::new(),
     }
 }
 
@@ -537,13 +735,22 @@ fn set_snapshot(
         || previous.current_user_id != next.current_user_id
         || previous.current_user != next.current_user
         || previous.current_user_avatar != next.current_user_avatar
+        || previous.current_user_status != next.current_user_status
+        || previous.current_user_custom_status != next.current_user_custom_status
+        || previous.current_user_decoration != next.current_user_decoration
+        || previous.current_user_nameplate != next.current_user_nameplate
+        || previous.profile != next.profile
         || previous.selected_guild_id != next.selected_guild_id
         || previous.selected_channel_id != next.selected_channel_id
         || previous.auth != next.auth
         || previous.error != next.error;
-    let guilds_changed = previous.guilds != next.guilds;
-    let channels_changed = previous.channels != next.channels;
-    let messages_changed = previous.messages != next.messages;
+    let guilds_changed =
+        previous.guilds != next.guilds || previous.guild_folders != next.guild_folders;
+    let channels_changed =
+        previous.channels != next.channels || previous.private_channels != next.private_channels;
+    let messages_changed = previous.messages != next.messages
+        || previous.pinned_messages != next.pinned_messages
+        || previous.mentions != next.mentions;
     let members_changed =
         previous.members != next.members || previous.member_list != next.member_list;
     let presences_changed = previous.presences != next.presences;
@@ -590,10 +797,44 @@ fn message_snapshot(message: &Message) -> MessageSnapshot {
         content: message.content.clone(),
         timestamp: message.timestamp.clone(),
         edited_timestamp: message.edited_timestamp.clone(),
+        kind: message.kind.0,
+        author_decoration: message.author.decoration_asset().map(str::to_owned),
+        attachments: message
+            .attachments
+            .iter()
+            .map(|attachment| AttachmentSnapshot {
+                id: attachment.id,
+                filename: attachment.filename.clone(),
+                url: attachment.url.clone(),
+                proxy_url: attachment.proxy_url.clone(),
+                content_type: attachment.content_type.clone(),
+                size: attachment.size,
+                width: attachment.width,
+                height: attachment.height,
+            })
+            .collect(),
+        reply: message
+            .referenced_message
+            .as_deref()
+            .map(|replied| ReplySnapshot {
+                message_id: replied.id,
+                author_id: replied.author.id,
+                author_name: replied
+                    .author
+                    .global_name
+                    .clone()
+                    .filter(|name| !name.is_empty())
+                    .unwrap_or_else(|| replied.author.username.clone()),
+                author_avatar: replied.author.avatar.clone(),
+                content: replied.content.clone(),
+            }),
     }
 }
 
 fn message_snapshot_from_value(value: &Value) -> MessageSnapshot {
+    if let Ok(message) = serde_json::from_value::<Message>(value.clone()) {
+        return message_snapshot(&message);
+    }
     let author = value.get("author");
     let author_id = json_id(author.and_then(|author| author.get("id")))
         .or_else(|| json_id(value.get("author_id")));
@@ -631,6 +872,14 @@ fn message_snapshot_from_value(value: &Value) -> MessageSnapshot {
             .get("edited_timestamp")
             .and_then(Value::as_str)
             .map(str::to_owned),
+        kind: value
+            .get("type")
+            .and_then(Value::as_u64)
+            .and_then(|kind| u8::try_from(kind).ok())
+            .unwrap_or_default(),
+        author_decoration: None,
+        attachments: Vec::new(),
+        reply: None,
     }
 }
 
@@ -686,11 +935,104 @@ fn message_snapshot_from_cached_value(
     snapshot
 }
 
+/// Maps GET /users/{id}/profile into a ProfileSnapshot, letting the
+/// server member profile override the account's bio, pronouns, banner and
+/// theme like the official client.
+fn profile_snapshot(value: &Value, user_id: u64, guild_id: Option<u64>) -> ProfileSnapshot {
+    let user = &value["user"];
+    let account = &value["user_profile"];
+    let member_profile = &value["guild_member_profile"];
+    let member = &value["guild_member"];
+    let text = |value: &Value| {
+        value
+            .as_str()
+            .filter(|text| !text.is_empty())
+            .map(str::to_owned)
+    };
+    let pick = |key: &str| {
+        text(&member_profile[key])
+            .or_else(|| text(&account[key]))
+            .or_else(|| text(&user[key]))
+    };
+    let colors = |value: &Value| -> Vec<u32> {
+        value
+            .as_array()
+            .map(|colors| {
+                colors
+                    .iter()
+                    .filter_map(|c| c.as_u64().and_then(|c| u32::try_from(c).ok()))
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+
+    let banner_url = match (guild_id, text(&member_profile["banner"])) {
+        (Some(guild), Some(hash)) => Some(format!(
+            "https://cdn.discordapp.com/guilds/{guild}/users/{user_id}/banners/{hash}.png?size=600"
+        )),
+        _ => text(&account["banner"])
+            .or_else(|| text(&user["banner"]))
+            .map(|hash| {
+                format!("https://cdn.discordapp.com/banners/{user_id}/{hash}.png?size=600")
+            }),
+    };
+    let theme_colors = Some(colors(&member_profile["theme_colors"]))
+        .filter(|colors| !colors.is_empty())
+        .unwrap_or_else(|| colors(&account["theme_colors"]));
+    let accent_color = [
+        &member_profile["accent_color"],
+        &account["accent_color"],
+        &user["accent_color"],
+    ]
+    .iter()
+    .find_map(|value| value.as_u64().and_then(|c| u32::try_from(c).ok()));
+    let decoration = text(&user["avatar_decoration_data"]["asset"])
+        .or_else(|| text(&user["collectibles"]["avatar_decoration"]["asset"]));
+
+    ProfileSnapshot {
+        user_id,
+        guild_id,
+        username: text(&user["username"]).unwrap_or_default(),
+        global_name: text(&user["global_name"]),
+        nickname: text(&member["nick"]),
+        avatar: text(&user["avatar"]),
+        banner_url,
+        accent_color,
+        theme_colors,
+        bio: pick("bio"),
+        pronouns: pick("pronouns"),
+        decoration,
+        badges: value["badges"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|badge| BadgeSnapshot {
+                id: text(&badge["id"]).unwrap_or_default(),
+                description: text(&badge["description"]).unwrap_or_default(),
+                icon: text(&badge["icon"]).unwrap_or_default(),
+                link: text(&badge["link"]),
+            })
+            .collect(),
+        mutual_guild_ids: value["mutual_guilds"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|guild| json_id(guild.get("id")))
+            .collect(),
+        mutual_friends_count: value["mutual_friends_count"]
+            .as_u64()
+            .and_then(|count| u32::try_from(count).ok()),
+        joined_at: text(&member["joined_at"]),
+    }
+}
+
 fn presence_snapshot(presence: &CachedPresence) -> PresenceSnapshot {
     PresenceSnapshot {
         user_id: presence.user_id,
         status: presence.status.clone(),
         activities: presence.activities.clone(),
+        custom_status: presence.custom_status.clone(),
+        mobile: presence.mobile,
     }
 }
 
@@ -763,6 +1105,9 @@ fn member_list_snapshot(cache: &StateCache, guild_id: Option<Snowflake>) -> Memb
                         status: cache
                             .presence(*user_id)
                             .map(|presence| presence.status.clone()),
+                        global_name: member.global_name.clone(),
+                        decoration: member.decoration.clone(),
+                        nameplate: member.nameplate.clone(),
                     }),
                     ..MemberListRowSnapshot::default()
                 },
@@ -790,9 +1135,7 @@ fn relationships_snapshot(cache: &StateCache) -> Vec<RelationshipSnapshot> {
                 global_name: user.and_then(|user| user.global_name.clone()),
                 avatar: user.and_then(|user| user.avatar.clone()),
                 avatar_decoration: user
-                    .and_then(|user| user.avatar_decoration_data.as_ref())
-                    .and_then(|data| data.get("asset"))
-                    .and_then(Value::as_str)
+                    .and_then(|user| user.decoration_asset())
                     .map(str::to_owned),
             }
         })
@@ -846,6 +1189,8 @@ fn channel_snapshot(channel: &Channel, can_view: bool, can_send: bool) -> Channe
                 username: user.username.clone(),
                 global_name: user.global_name.clone(),
                 avatar: user.avatar.clone(),
+                decoration: user.decoration_asset().map(str::to_owned),
+                nameplate: user.nameplate_asset().map(str::to_owned),
             })
             .collect(),
         can_view,
@@ -886,6 +1231,9 @@ fn build_snapshot(
     selected_guild_id: Option<Snowflake>,
     selected_channel_id: Option<Snowflake>,
     fetched_messages: &HashMap<Snowflake, Vec<Message>>,
+    pinned_messages: &HashMap<Snowflake, Vec<Message>>,
+    fetched_mentions: &[Message],
+    profile: &Option<ProfileSnapshot>,
     auth: &AuthStateSnapshot,
     error: Option<String>,
 ) -> ClientSnapshot {
@@ -980,6 +1328,9 @@ fn build_snapshot(
             nickname: member.nickname,
             roles: member.roles,
             status: cache.presence(member.user_id).map(|p| p.status.clone()),
+            global_name: member.global_name,
+            decoration: member.decoration,
+            nameplate: member.nameplate,
         })
         .collect();
 
@@ -988,6 +1339,41 @@ fn build_snapshot(
         .into_iter()
         .take(MAX_SNAPSHOT_PRESENCES)
         .map(presence_snapshot)
+        .collect();
+
+    let private_channels: Vec<PrivateChannelSnapshot> = cache
+        .private_channels()
+        .into_iter()
+        .take(MAX_SNAPSHOT_PRIVATE_CHANNELS)
+        .map(|channel| PrivateChannelSnapshot {
+            id: channel.id,
+            kind: channel.kind.0,
+            name: channel.name.clone().filter(|name| !name.is_empty()),
+            recipients: channel
+                .recipients
+                .iter()
+                .map(|user| RecipientSnapshot {
+                    id: user.id,
+                    username: user.username.clone(),
+                    global_name: user.global_name.clone(),
+                    avatar: user.avatar.clone(),
+                    decoration: user.decoration_asset().map(str::to_owned),
+                    nameplate: user.nameplate_asset().map(str::to_owned),
+                })
+                .collect(),
+            last_message_id: channel.last_message_id,
+        })
+        .collect();
+
+    let guild_folders: Vec<GuildFolderSnapshot> = cache
+        .guild_folders()
+        .iter()
+        .map(|folder| GuildFolderSnapshot {
+            id: folder.id,
+            name: folder.name.clone(),
+            color: folder.color,
+            guild_ids: folder.guild_ids.clone(),
+        })
         .collect();
 
     let mut channel_ids: Vec<Snowflake> = cache.channels().map(|channel| channel.id).collect();
@@ -1032,6 +1418,37 @@ fn build_snapshot(
         relationships: relationships_snapshot(&cache),
         auth: auth.clone(),
         error,
+        private_channels,
+        guild_folders,
+        current_user_status: cache.own_status().map(str::to_owned),
+        current_user_custom_status: cache.own_custom_status().map(str::to_owned),
+        current_user_decoration: cache
+            .current_user()
+            .and_then(|user| user.decoration_asset().map(str::to_owned)),
+        current_user_nameplate: cache
+            .current_user()
+            .and_then(|user| user.nameplate_asset().map(str::to_owned)),
+        profile: profile.clone(),
+        pinned_messages: selected_channel_id
+            .and_then(|channel_id| pinned_messages.get(&channel_id))
+            .map(|pins| pins.iter().map(message_snapshot).collect())
+            .unwrap_or_default(),
+        mentions: fetched_mentions.iter().map(message_snapshot).collect(),
+    }
+}
+
+/// Backfills a guild's channels from REST. Discord no longer sends
+/// `GUILD_CREATE` for every guild, so the cache needs this to populate a
+/// selected guild's sidebar.
+fn cache_guild_channels(
+    cache: &Arc<Mutex<StateCache>>,
+    guild_id: Snowflake,
+    channels: Vec<Channel>,
+) {
+    let mut cache = cache.lock().expect("cache lock");
+    for mut channel in channels {
+        channel.guild_id = Some(guild_id);
+        cache.upsert_channel(channel);
     }
 }
 
@@ -1049,6 +1466,31 @@ fn auth_failure_kind(failure: Option<LoginFailure>) -> AuthFailureKind {
         Some(LoginFailure::PasswordUpdateRequired) => AuthFailureKind::PasswordUpdateRequired,
         Some(LoginFailure::Network) => AuthFailureKind::Network,
         _ => AuthFailureKind::Unknown,
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+struct MfaFlow {
+    login_instance_id: Option<String>,
+    fingerprint: Option<String>,
+}
+
+fn remember_mfa_flow(
+    flows: &mut HashMap<String, MfaFlow>,
+    challenge: &AuthChallenge,
+    login_instance_id: Option<String>,
+    fingerprint: Option<String>,
+) {
+    if let AuthChallenge::MfaRequired { ticket, .. } = challenge {
+        flows.insert(
+            ticket.clone(),
+            MfaFlow {
+                login_instance_id,
+                fingerprint,
+            },
+        );
+    } else if matches!(challenge, AuthChallenge::Success { .. }) {
+        flows.clear();
     }
 }
 
@@ -1169,38 +1611,10 @@ fn handle_dispatch(
             }
         }
         "PRESENCE_UPDATE" => {
-            if let Some(user_id) = json_id(
-                data.get("user")
-                    .and_then(|user| user.get("id"))
-                    .or_else(|| data.get("user_id")),
-            ) {
-                let status = data
-                    .get("status")
-                    .and_then(Value::as_str)
-                    .unwrap_or("offline")
-                    .to_owned();
-                let activities = data
-                    .get("activities")
-                    .and_then(Value::as_array)
-                    .map(|activities| {
-                        activities
-                            .iter()
-                            .filter_map(|activity| {
-                                activity
-                                    .get("name")
-                                    .and_then(Value::as_str)
-                                    .map(str::to_owned)
-                            })
-                            .collect()
-                    })
-                    .unwrap_or_default();
+            if let Some(presence) = lampcord_core::state_cache::presence_from_value(data) {
                 push_event(
                     events,
-                    ClientEvent::PresenceUpdated(presence_snapshot(&CachedPresence {
-                        user_id,
-                        status,
-                        activities,
-                    })),
+                    ClientEvent::PresenceUpdated(presence_snapshot(&presence)),
                 );
             }
         }
@@ -1255,7 +1669,14 @@ async fn run(
     let mut selected_guild_id: Option<Snowflake> = None;
     let mut selected_channel_id: Option<Snowflake> = None;
     let mut fetched_messages: HashMap<Snowflake, Vec<Message>> = HashMap::new();
+    let mut fetched_mentions: Vec<Message> = Vec::new();
+    let mut pinned_messages: HashMap<Snowflake, Vec<Message>> = HashMap::new();
+    let mut profile: Option<ProfileSnapshot> = None;
     let mut auth_state = AuthStateSnapshot::default();
+    // Discord ties an MFA ticket to the login instance and fingerprint from the
+    // password response. Keep those alongside the ticket; the public challenge
+    // only exposes what the UI needs to display.
+    let mut mfa_flows: HashMap<String, MfaFlow> = HashMap::new();
     let mut gateway_task: Option<tokio::task::JoinHandle<()>> = None;
     let mut gateway_events: Option<mpsc::UnboundedReceiver<GatewayEvent>> = None;
     let mut gateway_outbound: Option<mpsc::UnboundedSender<Value>> = None;
@@ -1267,6 +1688,11 @@ async fn run(
     let user_agent = config.user_agent.clone();
     let gateway_url_override = config.gateway_url.clone();
     let captcha_solver = ConfigurableCaptchaSolver::default();
+    // Kotlin uses one Ktor client for /experiments, /auth/login and /auth/mfa,
+    // so the cookies set by the first two requests reach the MFA request. A
+    // fresh transport per command silently drops them and Discord answers with
+    // "invalid two-factor code" even for a correct code.
+    let auth_transport = ReqwestRestTransport::new();
     let seq = Arc::new(AtomicU64::new(0));
     let mut snapshot_dirty = true;
     let mut last_publish = Instant::now();
@@ -1279,6 +1705,9 @@ async fn run(
                    selected_guild_id: Option<Snowflake>,
                    selected_channel_id: Option<Snowflake>,
                    fetched_messages: &HashMap<Snowflake, Vec<Message>>,
+                   pinned_messages: &HashMap<Snowflake, Vec<Message>>,
+                   fetched_mentions: &[Message],
+                   profile: &Option<ProfileSnapshot>,
                    auth: &AuthStateSnapshot,
                    error: &Option<String>,
                    snapshot: &Arc<Mutex<SnapshotState>>,
@@ -1291,6 +1720,9 @@ async fn run(
             selected_guild_id,
             selected_channel_id,
             fetched_messages,
+            pinned_messages,
+            fetched_mentions,
+            profile,
             auth,
             error.clone(),
         );
@@ -1306,6 +1738,9 @@ async fn run(
                 selected_guild_id,
                 selected_channel_id,
                 &fetched_messages,
+                &pinned_messages,
+                &fetched_mentions,
+                &profile,
                 &auth_state,
                 &error,
                 &snapshot,
@@ -1367,6 +1802,7 @@ async fn run(
                     connection = ConnectionState::Connecting;
                     error = None;
                     fetched_messages.clear();
+                    fetched_mentions.clear();
                     persist_token(&mut token_store, &secret_store, &token);
                     push_event(&events, ClientEvent::ConnectionChanged(connection.clone()));
                     Ok::<(), String>(())
@@ -1435,6 +1871,7 @@ async fn run(
                         selected_guild_id = None;
                         selected_channel_id = None;
                         fetched_messages.clear();
+                        fetched_mentions.clear();
                         auth_state = AuthStateSnapshot::default();
                         error = None;
                         connection = ConnectionState::Disconnected;
@@ -1468,7 +1905,7 @@ async fn run(
                     ClientCommand::LoginPassword { login, password, captcha_key } => {
                         captcha_solver.set(captcha_key);
                         let config = default_rest_config(&api_base, user_agent.as_deref(), None);
-                        match ReqwestRestTransport::new() {
+                        match auth_transport.clone() {
                             Err(transport_error) => {
                                 update_auth!(AuthChallenge::Failed {
                                     kind: AuthFailureKind::Network,
@@ -1480,11 +1917,20 @@ async fn run(
                                 let fingerprint = api::auth::get_fingerprint(&client, &config)
                                     .await
                                     .ok()
-                                    .flatten();
+                                    .flatten()
+                                    .unwrap_or_default();
                                 let request = auth::LoginRequest::new(login, password);
-                                match api::auth::login(&client, &config, &request, fingerprint.as_deref()).await {
+                                mfa_flows.clear();
+                                match api::auth::login(&client, &config, &request, Some(&fingerprint)).await {
                                     Ok(response) => {
+                                        let login_instance_id = response.login_instance_id.clone();
                                         let challenge = auth_challenge_from_response(response);
+                                        remember_mfa_flow(
+                                            &mut mfa_flows,
+                                            &challenge,
+                                            login_instance_id,
+                                            Some(fingerprint),
+                                        );
                                         if let AuthChallenge::Success { token } = &challenge {
                                             if let Err(message) = connect_session!(token.clone()) {
                                                 update_auth!(AuthChallenge::Failed {
@@ -1511,8 +1957,9 @@ async fn run(
                     }
                     ClientCommand::SubmitMfa { code, ticket, method } => {
                         captcha_solver.set(None);
+                        let flow = mfa_flows.get(&ticket).cloned().unwrap_or_default();
                         let config = default_rest_config(&api_base, user_agent.as_deref(), None);
-                        match ReqwestRestTransport::new() {
+                        match auth_transport.clone() {
                             Err(transport_error) => {
                                 update_auth!(AuthChallenge::Failed {
                                     kind: AuthFailureKind::Network,
@@ -1521,10 +1968,26 @@ async fn run(
                             }
                             Ok(transport) => {
                                 let client = RestClient::new(config.clone(), transport, captcha_solver.clone());
-                                let request = auth::MfaLoginRequest::new(code, ticket);
-                                match api::auth::login_mfa(&client, &config, &request, None, &method).await {
+                                let fingerprint = match flow.fingerprint {
+                                    Some(fingerprint) => fingerprint,
+                                    None => api::auth::get_fingerprint(&client, &config)
+                                        .await
+                                        .ok()
+                                        .flatten()
+                                        .unwrap_or_default(),
+                                };
+                                let request = auth::MfaLoginRequest::new(code, ticket)
+                                    .with_login_instance_id(flow.login_instance_id.as_deref());
+                                match api::auth::login_mfa(&client, &config, &request, Some(&fingerprint), &method).await {
                                     Ok(response) => {
+                                        let login_instance_id = response.login_instance_id.clone();
                                         let challenge = auth_challenge_from_response(response);
+                                        remember_mfa_flow(
+                                            &mut mfa_flows,
+                                            &challenge,
+                                            login_instance_id,
+                                            Some(fingerprint),
+                                        );
                                         if let AuthChallenge::Success { token } = &challenge {
                                             if let Err(message) = connect_session!(token.clone()) {
                                                 update_auth!(AuthChallenge::Failed {
@@ -1550,10 +2013,19 @@ async fn run(
                         mark_snapshot_dirty!();
                     }
                     ClientCommand::SendMfaSms { ticket } => {
+                        let flow = mfa_flows.get(&ticket).cloned().unwrap_or_default();
                         let config = default_rest_config(&api_base, user_agent.as_deref(), None);
-                        if let Ok(transport) = ReqwestRestTransport::new() {
+                        if let Ok(transport) = auth_transport.clone() {
                             let client = RestClient::new(config.clone(), transport, captcha_solver.clone());
-                            match api::auth::send_mfa_sms(&client, &config, &ticket, None).await {
+                            let fingerprint = match flow.fingerprint {
+                                Some(fingerprint) => fingerprint,
+                                None => api::auth::get_fingerprint(&client, &config)
+                                    .await
+                                    .ok()
+                                    .flatten()
+                                    .unwrap_or_default(),
+                            };
+                            match api::auth::send_mfa_sms(&client, &config, &ticket, Some(&fingerprint)).await {
                                 Ok(phone) => update_auth!(AuthChallenge::SmsSent { phone }),
                                 Err(api_error) => update_auth!(AuthChallenge::Failed {
                                     kind: AuthFailureKind::Network,
@@ -1565,7 +2037,7 @@ async fn run(
                     }
                     ClientCommand::ForgotPassword { login } => {
                         let config = default_rest_config(&api_base, user_agent.as_deref(), None);
-                        if let Ok(transport) = ReqwestRestTransport::new() {
+                        if let Ok(transport) = auth_transport.clone() {
                             let client = RestClient::new(config.clone(), transport, captcha_solver.clone());
                             match api::auth::forgot_password(&client, &config, &login, None).await {
                                 Ok(api::auth::ForgotPasswordResult::Sent) => {
@@ -1642,6 +2114,24 @@ async fn run(
                             selected_channel_id = None;
                             if let Some(guild_id) = selected_guild_id {
                                 subscribe_guild_members(guild_id, &cache, &gateway_outbound);
+                                // Backfill channels for servers the cache only knows by id.
+                                if let (Some(rest_client), Some(cache)) = (rest.clone(), cache.clone()) {
+                                    let config = default_rest_config(
+                                        &api_base,
+                                        user_agent.as_deref(),
+                                        active_token.clone(),
+                                    );
+                                    match api::channel::get_guild_channels(&*rest_client, &config, guild_id).await {
+                                        Ok(channels) => cache_guild_channels(&cache, guild_id, channels),
+                                        Err(api_error) => {
+                                            error = Some(format!("Failed to fetch channels: {api_error}"));
+                                            push_event(&events, ClientEvent::CommandFailed {
+                                                kind: FfiErrorKind::Transport,
+                                                message: error.clone().unwrap_or_default(),
+                                            });
+                                        }
+                                    }
+                                }
                             }
                             mark_snapshot_dirty!();
                         }
@@ -1715,12 +2205,7 @@ async fn run(
                             match api::message::get_mentions(&*rest_client, &config, limit.unwrap_or(50).clamp(1, 100), before).await {
                                 Ok(messages) => {
                                     let count = messages.len() as u32;
-                                    for message in messages {
-                                        fetched_messages
-                                            .entry(message.channel_id)
-                                            .or_default()
-                                            .push(message);
-                                    }
+                                    fetched_mentions = messages;
                                     push_event(&events, ClientEvent::MentionsLoaded { count });
                                 }
                                 Err(api_error) => {
@@ -1749,6 +2234,106 @@ async fn run(
                                 }
                                 Err(api_error) => {
                                     error = Some(format!("Failed to send message: {api_error}"));
+                                    push_event(&events, ClientEvent::CommandFailed {
+                                        kind: FfiErrorKind::Transport,
+                                        message: error.clone().unwrap_or_default(),
+                                    });
+                                }
+                            }
+                        }
+                        mark_snapshot_dirty!();
+                    }
+                    ClientCommand::SendAttachments { channel_id, content, file_paths, reply_to_message_id, reply_to_guild_id } => {
+                        if let Some(rest_client) = rest.clone() {
+                            let config = default_rest_config(&api_base, user_agent.as_deref(), active_token.clone());
+                            let mut uploaded = Vec::new();
+                            let mut failure = None;
+                            for path in &file_paths {
+                                let path = std::path::Path::new(path);
+                                let filename = path
+                                    .file_name()
+                                    .map(|name| name.to_string_lossy().into_owned())
+                                    .unwrap_or_else(|| "file".to_owned());
+                                let data = match std::fs::read(path) {
+                                    Ok(data) => data,
+                                    Err(io_error) => {
+                                        failure = Some(format!("Couldn't read {filename}: {io_error}"));
+                                        break;
+                                    }
+                                };
+                                match api::upload_attachment(&*rest_client, &config, channel_id, &filename, data).await {
+                                    Ok(file) => uploaded.push(file),
+                                    Err(api_error) => {
+                                        failure = Some(format!("Failed to upload {filename}: {api_error}"));
+                                        break;
+                                    }
+                                }
+                            }
+                            if failure.is_none() {
+                                match api::send_channel_message_with_attachments(&*rest_client, &config, channel_id, &content, &uploaded, reply_to_message_id, reply_to_guild_id).await {
+                                    Ok(message) => {
+                                        let entry = fetched_messages.entry(Snowflake::from(channel_id)).or_default();
+                                        if !entry.iter().any(|existing| existing.id == message.id) {
+                                            entry.push(message);
+                                            entry.sort_by(|left, right| left.id.cmp(&right.id));
+                                        }
+                                        error = None;
+                                    }
+                                    Err(api_error) => failure = Some(format!("Failed to send message: {api_error}")),
+                                }
+                            }
+                            if let Some(message) = failure {
+                                error = Some(message.clone());
+                                push_event(&events, ClientEvent::CommandFailed { kind: FfiErrorKind::Transport, message });
+                            }
+                        }
+                        mark_snapshot_dirty!();
+                    }
+                    ClientCommand::FetchProfile { user_id, guild_id } => {
+                        if let Some(rest_client) = rest.clone() {
+                            let config = default_rest_config(&api_base, user_agent.as_deref(), active_token.clone());
+                            match api::user::get_user_profile(&*rest_client, &config, user_id, guild_id).await {
+                                Ok(value) => profile = Some(profile_snapshot(&value, user_id, guild_id)),
+                                Err(api_error) => {
+                                    error = Some(format!("Failed to load profile: {api_error}"));
+                                    push_event(&events, ClientEvent::CommandFailed {
+                                        kind: FfiErrorKind::Transport,
+                                        message: error.clone().unwrap_or_default(),
+                                    });
+                                }
+                            }
+                        }
+                        mark_snapshot_dirty!();
+                    }
+                    ClientCommand::SetCustomStatus { text } => {
+                        if let Some(rest_client) = rest.clone() {
+                            let config = default_rest_config(&api_base, user_agent.as_deref(), active_token.clone());
+                            match api::user::update_custom_status(&*rest_client, &config, text.as_deref(), None, None).await {
+                                Ok(_) => {
+                                    if let Some(cache) = cache.as_ref() {
+                                        cache.lock().expect("cache lock").set_own_custom_status(text.as_deref());
+                                    }
+                                }
+                                Err(api_error) => {
+                                    error = Some(format!("Failed to set custom status: {api_error}"));
+                                    push_event(&events, ClientEvent::CommandFailed {
+                                        kind: FfiErrorKind::Transport,
+                                        message: error.clone().unwrap_or_default(),
+                                    });
+                                }
+                            }
+                        }
+                        mark_snapshot_dirty!();
+                    }
+                    ClientCommand::FetchPins { channel_id } => {
+                        if let Some(rest_client) = rest.clone() {
+                            let config = default_rest_config(&api_base, user_agent.as_deref(), active_token.clone());
+                            match api::message::get_pinned_messages(&*rest_client, &config, channel_id).await {
+                                Ok(pins) => {
+                                    pinned_messages.insert(Snowflake::from(channel_id), pins);
+                                }
+                                Err(api_error) => {
+                                    error = Some(format!("Failed to load pins: {api_error}"));
                                     push_event(&events, ClientEvent::CommandFailed {
                                         kind: FfiErrorKind::Transport,
                                         message: error.clone().unwrap_or_default(),
@@ -1853,7 +2438,13 @@ async fn run(
                     ClientCommand::SetStatus { status } => {
                         if let Some(rest_client) = rest.clone() {
                             let config = default_rest_config(&api_base, user_agent.as_deref(), active_token.clone());
-                            if let Err(api_error) = api::user::update_status(&*rest_client, &config, &status).await {
+                            let result = api::user::update_status(&*rest_client, &config, &status).await;
+                            if result.is_ok() {
+                                if let Some(cache) = cache.as_ref() {
+                                    cache.lock().expect("cache lock").set_own_status(&status);
+                                }
+                            }
+                            if let Err(api_error) = result {
                                 error = Some(format!("Failed to set status: {api_error}"));
                                 push_event(&events, ClientEvent::CommandFailed {
                                     kind: FfiErrorKind::Transport,
@@ -1957,6 +2548,12 @@ async fn run(
                     }
                     GatewayEvent::Resumed => {
                         connection = ConnectionState::Ready;
+                    }
+                    GatewayEvent::AuthTokenRefreshed { token: refreshed } => {
+                        if let Some(previous) = active_token.replace(refreshed.clone()) {
+                            forget_token(&mut token_store, &secret_store, &previous);
+                        }
+                        persist_token(&mut token_store, &secret_store, &refreshed);
                     }
                     GatewayEvent::AuthFailed { .. } => {
                         connection = ConnectionState::Error { message: "Authentication failed".to_owned() };
@@ -2101,6 +2698,84 @@ mod tests {
     }
 
     #[test]
+    fn profiles_prefer_the_server_member_profile() {
+        let value = serde_json::json!({
+            "user": {"id": "7", "username": "dim", "global_name": "DiM", "avatar": "abc", "banner": "acct",
+                     "avatar_decoration_data": {"asset": "deco"}},
+            "user_profile": {"bio": "account bio", "pronouns": "they/them", "theme_colors": [1, 2]},
+            "guild_member_profile": {"bio": "server bio", "banner": "srv"},
+            "guild_member": {"nick": "dimmy", "joined_at": "2024-01-01T00:00:00Z"},
+            "badges": [{"id": "hypesquad", "description": "HypeSquad", "icon": "h"}],
+            "mutual_guilds": [{"id": "9"}],
+            "mutual_friends_count": 3
+        });
+        let profile = profile_snapshot(&value, 7, Some(42));
+        assert_eq!(profile.bio.as_deref(), Some("server bio"));
+        assert_eq!(profile.pronouns.as_deref(), Some("they/them"));
+        assert_eq!(profile.theme_colors, vec![1, 2]);
+        assert_eq!(profile.nickname.as_deref(), Some("dimmy"));
+        assert_eq!(profile.decoration.as_deref(), Some("deco"));
+        assert!(
+            profile
+                .banner_url
+                .unwrap()
+                .contains("/guilds/42/users/7/banners/srv.png")
+        );
+        assert_eq!(profile.mutual_guild_ids, vec![9]);
+        assert_eq!(profile.badges[0].description, "HypeSquad");
+    }
+
+    #[test]
+    fn guild_channel_backfill_populates_selected_guild_snapshot() {
+        let cache = Arc::new(Mutex::new(StateCache::new()));
+        let guild_id: Snowflake = 7;
+        let channels: Vec<Channel> = vec![
+            serde_json::from_value(json!({
+                "id": "11",
+                "type": 4,
+                "name": "Info",
+                "position": 0
+            }))
+            .expect("category"),
+            serde_json::from_value(json!({
+                "id": "10",
+                "type": 0,
+                "name": "general",
+                "position": 1
+            }))
+            .expect("text channel"),
+        ];
+
+        cache_guild_channels(&cache, guild_id, channels);
+        let snapshot = build_snapshot(
+            ConnectionState::Ready,
+            true,
+            &Some(cache),
+            Some(guild_id),
+            None,
+            &HashMap::new(),
+            &HashMap::new(),
+            &[],
+            &None,
+            &AuthStateSnapshot::default(),
+            None,
+        );
+
+        let names: Vec<&str> = snapshot
+            .channels
+            .iter()
+            .map(|channel| channel.name.as_str())
+            .collect();
+        assert_eq!(names, ["Info", "general"]);
+        assert!(
+            snapshot
+                .channels
+                .iter()
+                .all(|channel| channel.guild_id == Some(guild_id))
+        );
+    }
+
+    #[test]
     fn auth_response_maps_captcha_and_mfa_challenges() {
         let captcha = auth_challenge_from_response(auth::LoginResponse {
             body: Some(
@@ -2136,6 +2811,70 @@ mod tests {
             }
             other => panic!("unexpected challenge: {other:?}"),
         }
+    }
+
+    #[test]
+    fn rest_config_uses_client_super_properties_for_mfa() {
+        let config = default_rest_config("https://example.invalid/api/v9", None, None);
+        let headers = config.login_headers(None);
+        let encoded = headers
+            .iter()
+            .find(|(name, _)| name == "X-Super-Properties")
+            .map(|(_, value)| value.as_str())
+            .expect("super properties header");
+        let decoded = base64::engine::general_purpose::STANDARD
+            .decode(encoded)
+            .expect("base64 super properties");
+        let properties: Value = serde_json::from_slice(&decoded).expect("json super properties");
+
+        if cfg!(target_os = "android") {
+            assert_eq!(properties["client_build_number"], json!(6081));
+            assert_eq!(properties["browser"], "Discord Android");
+        } else {
+            assert_eq!(properties["client_build_number"], json!(575562));
+            assert_eq!(properties["browser"], "Discord Client");
+            assert_eq!(properties["device"], "Desktop");
+            assert_eq!(properties["browser_version"], "37.6.0");
+        }
+        assert_eq!(properties["design_id"], json!(2));
+        assert!(properties["device_vendor_id"].as_str().is_some_and(|id| id.len() == 36));
+
+        let other = default_rest_config("https://example.invalid/api/v9", None, None);
+        let installation = |headers: &[(String, String)]| {
+            headers
+                .iter()
+                .find(|(name, _)| name == "X-Installation-Id")
+                .map(|(_, value)| value.clone())
+        };
+        assert_eq!(installation(&headers), installation(&other.login_headers(None)));
+    }
+
+    #[test]
+    fn mfa_flow_keeps_login_instance_and_fingerprint_for_ticket() {
+        let mut flows = HashMap::new();
+        remember_mfa_flow(
+            &mut flows,
+            &AuthChallenge::MfaRequired {
+                ticket: "ticket-1".to_owned(),
+                methods: vec!["totp".to_owned()],
+            },
+            Some("instance-1".to_owned()),
+            Some("fingerprint-1".to_owned()),
+        );
+
+        let flow = flows.get("ticket-1").expect("stored MFA flow");
+        assert_eq!(flow.login_instance_id.as_deref(), Some("instance-1"));
+        assert_eq!(flow.fingerprint.as_deref(), Some("fingerprint-1"));
+
+        remember_mfa_flow(
+            &mut flows,
+            &AuthChallenge::Success {
+                token: "token".to_owned(),
+            },
+            None,
+            None,
+        );
+        assert!(flows.is_empty());
     }
 
     #[test]

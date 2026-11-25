@@ -13,9 +13,10 @@ use std::sync::Arc;
 pub use error::{FfiClientError, FfiError, FfiErrorKind, FfiResult};
 pub use runtime::RuntimeHandle;
 pub use snapshot::{
-    AuthStateSnapshot, ChannelSnapshot, ClientSnapshot, GuildSnapshot, MemberSnapshot,
-    MessageSnapshot, PresenceSnapshot, ReadStateSnapshot, SNAPSHOT_SCHEMA_VERSION,
-    SnapshotMetaPatch, SnapshotPatch, SnapshotVersions,
+    AttachmentSnapshot, AuthStateSnapshot, BadgeSnapshot, ChannelSnapshot, ClientSnapshot,
+    GuildFolderSnapshot, GuildSnapshot, MemberSnapshot, MessageSnapshot, PresenceSnapshot,
+    PrivateChannelSnapshot, ProfileSnapshot, ReadStateSnapshot, RecipientSnapshot, ReplySnapshot,
+    SNAPSHOT_SCHEMA_VERSION, SnapshotMetaPatch, SnapshotPatch, SnapshotVersions,
 };
 pub use storage::{ForeignSecretStore, PlatformSecretStore};
 pub use types::{
@@ -113,7 +114,9 @@ impl LampcordClient {
         ticket: String,
         method: String,
     ) -> Result<(), FfiClientError> {
-        if code.trim().is_empty() || ticket.trim().is_empty() || method.trim().is_empty() {
+        let code = code.trim().to_owned();
+        let method = method.trim().to_owned();
+        if code.is_empty() || ticket.trim().is_empty() || method.is_empty() {
             return Err(FfiClientError::invalid_input(
                 "code, ticket and method must not be empty",
             ));
@@ -190,6 +193,40 @@ impl LampcordClient {
         self.send(ClientCommand::SendMessage {
             channel_id,
             content,
+            reply_to_message_id,
+            reply_to_guild_id,
+        })
+    }
+
+    pub fn fetch_profile(&self, user_id: u64, guild_id: Option<u64>) -> Result<(), FfiClientError> {
+        self.send(ClientCommand::FetchProfile { user_id, guild_id })
+    }
+
+    pub fn set_custom_status(&self, text: Option<String>) -> Result<(), FfiClientError> {
+        self.send(ClientCommand::SetCustomStatus { text })
+    }
+
+    pub fn fetch_pins(&self, channel_id: u64) -> Result<(), FfiClientError> {
+        self.send(ClientCommand::FetchPins { channel_id })
+    }
+
+    pub fn send_attachments(
+        &self,
+        channel_id: u64,
+        content: String,
+        file_paths: Vec<String>,
+        reply_to_message_id: Option<u64>,
+        reply_to_guild_id: Option<u64>,
+    ) -> Result<(), FfiClientError> {
+        if file_paths.is_empty() {
+            return Err(FfiClientError::invalid_input(
+                "file_paths must not be empty",
+            ));
+        }
+        self.send(ClientCommand::SendAttachments {
+            channel_id,
+            content,
+            file_paths,
             reply_to_message_id,
             reply_to_guild_id,
         })

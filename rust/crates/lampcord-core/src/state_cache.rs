@@ -43,6 +43,16 @@ const HANDLED_EVENTS: &[&str] = &[
     "RELATIONSHIP_REMOVE",
 ];
 
+/// A server folder from the user's settings, in rail order. Discord also
+/// stores lone servers as nameless folders without an id.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GuildFolder {
+    pub id: Option<i64>,
+    pub name: Option<String>,
+    pub color: Option<u32>,
+    pub guild_ids: Vec<Snowflake>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MemberListRow {
     Pending,
@@ -62,16 +72,76 @@ pub struct CachedMember {
     pub guild_id: Snowflake,
     pub user_id: Snowflake,
     pub username: String,
+    pub global_name: Option<String>,
     pub avatar: Option<String>,
     pub nickname: Option<String>,
     pub roles: Vec<Snowflake>,
+    /// Avatar frame asset; a server-specific one wins over the user's.
+    pub decoration: Option<String>,
+    pub nameplate: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CachedPresence {
     pub user_id: Snowflake,
     pub status: String,
+    /// Names of everything but the custom status (type 4).
     pub activities: Vec<String>,
+    /// The custom status text, when one is set.
+    pub custom_status: Option<String>,
+    /// Online only from a phone (`client_status` has just `mobile`).
+    pub mobile: bool,
+}
+
+/// Parses a presence from PRESENCE_UPDATE, READY `presences` or
+/// `merged_presences` (which carry `user_id` instead of a `user` object).
+pub fn presence_from_value(value: &Value) -> Option<CachedPresence> {
+    let user_id = snowflake(
+        value
+            .get("user")
+            .and_then(|user| user.get("id"))
+            .or_else(|| value.get("user_id")),
+    )?;
+    let status = value
+        .get("status")
+        .and_then(Value::as_str)
+        .unwrap_or("offline")
+        .to_owned();
+    let activities: Vec<&Value> = value
+        .get("activities")
+        .and_then(Value::as_array)
+        .map(|activities| activities.iter().collect())
+        .unwrap_or_default();
+    let is_custom = |activity: &Value| activity.get("type").and_then(Value::as_u64) == Some(4);
+    let custom_status = activities
+        .iter()
+        .find(|activity| is_custom(activity))
+        .and_then(|activity| activity.get("state").and_then(Value::as_str))
+        .filter(|state| !state.is_empty())
+        .map(str::to_owned);
+    let activities = activities
+        .iter()
+        .filter(|activity| !is_custom(activity))
+        .filter_map(|activity| {
+            activity
+                .get("name")
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+        })
+        .collect();
+    let clients = value.get("client_status").and_then(Value::as_object);
+    let mobile = clients.is_some_and(|clients| {
+        clients.contains_key("mobile")
+            && !clients.contains_key("desktop")
+            && !clients.contains_key("web")
+    });
+    Some(CachedPresence {
+        user_id,
+        status,
+        activities,
+        custom_status,
+        mobile,
+    })
 }
 
 #[derive(Debug)]
@@ -108,6 +178,9 @@ pub struct StateCache {
     users: HashMap<Snowflake, User>,
     guilds: HashMap<Snowflake, Guild>,
     guild_order: Vec<Snowflake>,
+    guild_folders: Vec<GuildFolder>,
+    own_status: Option<String>,
+    own_custom_status: Option<String>,
     channels: HashMap<Snowflake, Channel>,
     guild_channels: HashMap<Snowflake, Vec<Snowflake>>,
     private_channel_ids: Vec<Snowflake>,
@@ -116,6 +189,7 @@ pub struct StateCache {
     members: HashMap<Snowflake, HashMap<Snowflake, CachedMember>>,
     presences: HashMap<Snowflake, CachedPresence>,
     read_state: ReadStateStore,
+    user_guild_settings: crate::user_guild_settings::UserGuildSettingsStore,
     guild_order_hint: Vec<Snowflake>,
     member_lists: HashMap<Snowflake, MemberListState>,
     dirty: bool,
@@ -132,6 +206,10 @@ impl StateCache {
             return;
         }
         self.clear_data();
+        self.token = Some(token.to_owned());
+    }
+
+    pub fn rotate_token(&mut self, token: &str) {
         self.token = Some(token.to_owned());
     }
 
@@ -168,6 +246,29 @@ impl StateCache {
             .collect()
     }
 
+    pub fn guild_folders(&self) -> &[GuildFolder] {
+        &self.guild_folders
+    }
+
+    /// The status picked in settings (online, idle, dnd, invisible).
+    pub fn own_status(&self) -> Option<&str> {
+        self.own_status.as_deref()
+    }
+
+    pub fn own_custom_status(&self) -> Option<&str> {
+        self.own_custom_status.as_deref()
+    }
+
+    /// Mirrors a status change made through the REST settings endpoint
+    /// before Discord echoes it back.
+    pub fn set_own_status(&mut self, status: &str) {
+        self.own_status = Some(status.to_owned());
+    }
+
+    pub fn set_own_custom_status(&mut self, text: Option<&str>) {
+        self.own_custom_status = text.filter(|text| !text.is_empty()).map(str::to_owned);
+    }
+
     pub fn guild(&self, guild_id: Snowflake) -> Option<&Guild> {
         self.guilds.get(&guild_id)
     }
@@ -190,6 +291,12 @@ impl StateCache {
 
     pub fn channels(&self) -> impl Iterator<Item = &Channel> {
         self.channels.values()
+    }
+
+    /// Inserts or merges a channel received outside gateway events, such as a
+    /// REST backfill of a guild's channel list.
+    pub fn upsert_channel(&mut self, channel: Channel) {
+        self.update_channel(channel);
     }
 
     pub fn channels_for_guild(&self, guild_id: Snowflake) -> Vec<&Channel> {
@@ -267,6 +374,10 @@ impl StateCache {
         presences
     }
 
+    pub fn user_guild_settings(&self) -> &crate::user_guild_settings::UserGuildSettingsStore {
+        &self.user_guild_settings
+    }
+
     pub fn read_state(&self) -> &ReadStateStore {
         &self.read_state
     }
@@ -300,10 +411,58 @@ impl StateCache {
             "PRESENCE_UPDATE" => self.handle_presence(data),
             "GUILD_MEMBER_LIST_UPDATE" => self.handle_member_list_update(data),
             "USER_SETTINGS_UPDATE" => self.handle_user_settings(data),
+            "USER_GUILD_SETTINGS_UPDATE" => {
+                self.user_guild_settings.handle_update(data);
+                Ok(())
+            }
             "RELATIONSHIP_ADD" | "RELATIONSHIP_UPDATE" => self.handle_relationship_upsert(data),
             "RELATIONSHIP_REMOVE" => self.handle_relationship_remove(data),
             _ => Ok(()),
         }
+    }
+
+    /// Reads folders and the user's status from READY's `user_settings` or
+    /// a USER_SETTINGS_UPDATE; keys a payload leaves out stay as they were.
+    fn apply_user_settings(&mut self, settings: Option<&Value>) {
+        let Some(settings) = settings else { return };
+        if let Some(status) = settings.get("status").and_then(Value::as_str) {
+            self.own_status = Some(status.to_owned());
+        }
+        if let Some(custom) = settings.get("custom_status") {
+            self.own_custom_status = custom
+                .get("text")
+                .and_then(Value::as_str)
+                .filter(|text| !text.is_empty())
+                .map(str::to_owned);
+        }
+        let Some(folders) = settings.get("guild_folders").and_then(Value::as_array) else {
+            return;
+        };
+        self.guild_folders = folders
+            .iter()
+            .map(|folder| GuildFolder {
+                id: folder.get("id").and_then(|id| match id {
+                    Value::String(text) => text.parse().ok(),
+                    other => other.as_i64(),
+                }),
+                name: folder
+                    .get("name")
+                    .and_then(Value::as_str)
+                    .filter(|name| !name.is_empty())
+                    .map(str::to_owned),
+                color: folder
+                    .get("color")
+                    .and_then(Value::as_u64)
+                    .and_then(|color| u32::try_from(color).ok()),
+                guild_ids: folder
+                    .get("guild_ids")
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|id| snowflake(Some(id)))
+                    .collect(),
+            })
+            .collect();
     }
 
     fn handle_ready(&mut self, data: Option<&Value>) -> Result<(), CacheError> {
@@ -315,6 +474,8 @@ impl StateCache {
             self.current_user = Some(user);
         }
 
+        // With DEDUPE_USER_OBJECTS, users arrive once here and channels
+        // only carry their ids.
         if let Some(users) = data.get("users").and_then(Value::as_array) {
             for value in users {
                 if let Ok(user) = decode::<User>(value) {
@@ -322,7 +483,7 @@ impl StateCache {
                 }
             }
         }
-
+        self.apply_user_settings(data.get("user_settings"));
         if let Some(settings) = data.get("user_settings") {
             let hint = guild_order_from_settings(settings);
             if !hint.is_empty() {
@@ -393,7 +554,19 @@ impl StateCache {
             if let Some(channels) = data.get(key).and_then(Value::as_array) {
                 for value in channels {
                     match decode::<Channel>(value) {
-                        Ok(channel) => self.update_channel(channel),
+                        Ok(mut channel) => {
+                            if channel.recipients.is_empty() {
+                                channel.recipients = value
+                                    .get("recipient_ids")
+                                    .and_then(Value::as_array)
+                                    .into_iter()
+                                    .flatten()
+                                    .filter_map(|id| snowflake(Some(id)))
+                                    .filter_map(|id| self.users.get(&id).cloned())
+                                    .collect();
+                            }
+                            self.update_channel(channel);
+                        }
                         Err(_) => skipped += 1,
                     }
                 }
@@ -405,8 +578,27 @@ impl StateCache {
                 self.cache_presence_value(presence);
             }
         }
+        // User accounts get friends' and servers' presences here instead.
+        if let Some(merged) = data.get("merged_presences") {
+            let friends = merged
+                .get("friends")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten();
+            let guilds = merged
+                .get("guilds")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_array)
+                .flatten();
+            for presence in friends.chain(guilds) {
+                self.cache_presence_value(presence);
+            }
+        }
 
         self.read_state.handle_ready(data);
+        self.user_guild_settings.handle_ready(data);
         if skipped > 0 {
             return Err(CacheError::SkippedEntries {
                 event: "READY",
@@ -444,6 +636,7 @@ impl StateCache {
 
     fn handle_user_settings(&mut self, data: Option<&Value>) -> Result<(), CacheError> {
         let data = data.ok_or(CacheError::MissingData("USER_SETTINGS_UPDATE"))?;
+        self.apply_user_settings(Some(data));
         let hint = guild_order_from_settings(data);
         if !hint.is_empty() {
             self.guild_order_hint = hint;
@@ -648,6 +841,10 @@ impl StateCache {
                     .avatar_decoration_data
                     .clone()
                     .or_else(|| existing.avatar_decoration_data.clone()),
+                collectibles: user
+                    .collectibles
+                    .clone()
+                    .or_else(|| existing.collectibles.clone()),
                 global_name: user
                     .global_name
                     .clone()
@@ -803,6 +1000,22 @@ impl StateCache {
             .or_else(|| value.get("nickname"))
             .and_then(Value::as_str)
             .map(str::to_owned);
+        let global_name = user
+            .and_then(|user| user.get("global_name"))
+            .and_then(Value::as_str)
+            .filter(|name| !name.is_empty())
+            .map(str::to_owned);
+        let asset = |value: Option<&Value>, path: &[&str]| {
+            path.iter()
+                .try_fold(value?, |value, key| value.get(key))
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+        };
+        let decoration = asset(Some(value), &["avatar_decoration_data", "asset"])
+            .or_else(|| asset(user, &["avatar_decoration_data", "asset"]))
+            .or_else(|| asset(user, &["collectibles", "avatar_decoration", "asset"]));
+        let nameplate = asset(Some(value), &["collectibles", "nameplate", "asset"])
+            .or_else(|| asset(user, &["collectibles", "nameplate", "asset"]));
         let roles = value
             .get("roles")
             .and_then(Value::as_array)
@@ -819,49 +1032,20 @@ impl StateCache {
                 guild_id,
                 user_id,
                 username,
+                global_name,
                 avatar,
                 nickname,
                 roles,
+                decoration,
+                nameplate,
             },
         );
     }
 
     fn cache_presence_value(&mut self, value: &Value) {
-        let user = value.get("user");
-        let Some(user_id) = snowflake(
-            user.and_then(|user| user.get("id"))
-                .or_else(|| value.get("user_id")),
-        ) else {
-            return;
-        };
-        let status = value
-            .get("status")
-            .and_then(Value::as_str)
-            .unwrap_or("offline")
-            .to_owned();
-        let activities = value
-            .get("activities")
-            .and_then(Value::as_array)
-            .map(|activities| {
-                activities
-                    .iter()
-                    .filter_map(|activity| {
-                        activity
-                            .get("name")
-                            .and_then(Value::as_str)
-                            .map(str::to_owned)
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
-        self.presences.insert(
-            user_id,
-            CachedPresence {
-                user_id,
-                status,
-                activities,
-            },
-        );
+        if let Some(presence) = presence_from_value(value) {
+            self.presences.insert(presence.user_id, presence);
+        }
     }
 
     fn handle_guild_member(&mut self, data: Option<&Value>) -> Result<(), CacheError> {
@@ -1049,6 +1233,9 @@ impl StateCache {
         self.users.clear();
         self.guilds.clear();
         self.guild_order.clear();
+        self.guild_folders.clear();
+        self.own_status = None;
+        self.own_custom_status = None;
         self.guild_order_hint.clear();
         self.member_lists.clear();
         self.channels.clear();
@@ -1059,6 +1246,7 @@ impl StateCache {
         self.members.clear();
         self.presences.clear();
         self.read_state.clear();
+        self.user_guild_settings.clear();
     }
 
     fn touch_message_channel(&mut self, channel_id: Snowflake) {
@@ -1558,6 +1746,52 @@ mod tests {
             .expect("ready event");
         cache.switch_token("token-1");
         assert!(cache.current_user().is_some());
+    }
+
+    #[test]
+    fn ready_resolves_deduped_recipients_and_folders() {
+        let mut cache = StateCache::new();
+        cache
+            .handle_event(
+                "READY",
+                Some(&json!({
+                    "user": {"id": "1", "username": "me"},
+                    "users": [{"id": "2", "username": "friend", "global_name": "Friend"}],
+                    "user_settings": {"status": "invisible", "custom_status": {"text": "as above"}, "guild_folders": [
+                        {"id": null, "guild_ids": ["10"]},
+                        {"id": 7, "name": "Games", "color": 5793266, "guild_ids": ["11", "12"]}
+                    ]},
+                    "private_channels": [{"id": "9", "type": 1, "recipient_ids": ["2"]}],
+                    "merged_presences": {"friends": [{"user_id": "2", "status": "online", "client_status": {"mobile": "online"}, "activities": [
+                        {"type": 4, "name": "Custom Status", "state": "as above, so below"},
+                        {"type": 0, "name": "Blender"}
+                    ]}]}
+                })),
+            )
+            .unwrap();
+
+        assert_eq!(cache.own_status(), Some("invisible"));
+        assert_eq!(cache.own_custom_status(), Some("as above"));
+        let dm = cache.private_channels()[0];
+        assert_eq!(dm.recipients[0].global_name.as_deref(), Some("Friend"));
+        let folders = cache.guild_folders();
+        assert_eq!(folders.len(), 2);
+        assert_eq!(folders[0].id, None);
+        assert_eq!(folders[1].name.as_deref(), Some("Games"));
+        assert_eq!(folders[1].guild_ids, vec![11, 12]);
+        let friend = cache.presence(2).unwrap();
+        assert_eq!(friend.status, "online");
+        assert!(friend.mobile);
+        assert_eq!(friend.custom_status.as_deref(), Some("as above, so below"));
+        assert_eq!(friend.activities, vec!["Blender".to_owned()]);
+
+        cache
+            .handle_event(
+                "USER_SETTINGS_UPDATE",
+                Some(&json!({"guild_folders": [{"id": "8", "guild_ids": ["12"]}]})),
+            )
+            .unwrap();
+        assert_eq!(cache.guild_folders()[0].id, Some(8));
     }
 }
 

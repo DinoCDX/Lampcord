@@ -818,6 +818,14 @@ internal open class UniffiVTableCallbackInterfacePlatformSecretStore(
 
 
 
+
+
+
+
+
+
+
+
 // A JNA Library to expose the extern-C FFI definitions.
 // This is an implementation detail which will be called internally by the public API.
 
@@ -866,6 +874,10 @@ internal interface UniffiLib : Library {
     ): Unit
     fun uniffi_lampcord_ffi_fn_method_lampcordclient_fetch_messages(`ptr`: Pointer,`channelId`: Long,`before`: RustBuffer.ByValue,`limit`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
+    fun uniffi_lampcord_ffi_fn_method_lampcordclient_fetch_pins(`ptr`: Pointer,`channelId`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    fun uniffi_lampcord_ffi_fn_method_lampcordclient_fetch_profile(`ptr`: Pointer,`userId`: Long,`guildId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
     fun uniffi_lampcord_ffi_fn_method_lampcordclient_forgot_password(`ptr`: Pointer,`login`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     fun uniffi_lampcord_ffi_fn_method_lampcordclient_login_password(`ptr`: Pointer,`login`: RustBuffer.ByValue,`password`: RustBuffer.ByValue,`captchaKey`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -880,11 +892,15 @@ internal interface UniffiLib : Library {
     ): Unit
     fun uniffi_lampcord_ffi_fn_method_lampcordclient_send(`ptr`: Pointer,`command`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
+    fun uniffi_lampcord_ffi_fn_method_lampcordclient_send_attachments(`ptr`: Pointer,`channelId`: Long,`content`: RustBuffer.ByValue,`filePaths`: RustBuffer.ByValue,`replyToMessageId`: RustBuffer.ByValue,`replyToGuildId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
     fun uniffi_lampcord_ffi_fn_method_lampcordclient_send_message(`ptr`: Pointer,`channelId`: Long,`content`: RustBuffer.ByValue,`replyToMessageId`: RustBuffer.ByValue,`replyToGuildId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     fun uniffi_lampcord_ffi_fn_method_lampcordclient_send_mfa_sms(`ptr`: Pointer,`ticket`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     fun uniffi_lampcord_ffi_fn_method_lampcordclient_send_typing(`ptr`: Pointer,`channelId`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    fun uniffi_lampcord_ffi_fn_method_lampcordclient_set_custom_status(`ptr`: Pointer,`text`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     fun uniffi_lampcord_ffi_fn_method_lampcordclient_set_member_list_ranges(`ptr`: Pointer,`ranges`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
@@ -1052,6 +1068,10 @@ internal interface UniffiLib : Library {
     ): Short
     fun uniffi_lampcord_ffi_checksum_method_lampcordclient_fetch_messages(
     ): Short
+    fun uniffi_lampcord_ffi_checksum_method_lampcordclient_fetch_pins(
+    ): Short
+    fun uniffi_lampcord_ffi_checksum_method_lampcordclient_fetch_profile(
+    ): Short
     fun uniffi_lampcord_ffi_checksum_method_lampcordclient_forgot_password(
     ): Short
     fun uniffi_lampcord_ffi_checksum_method_lampcordclient_login_password(
@@ -1066,11 +1086,15 @@ internal interface UniffiLib : Library {
     ): Short
     fun uniffi_lampcord_ffi_checksum_method_lampcordclient_send(
     ): Short
+    fun uniffi_lampcord_ffi_checksum_method_lampcordclient_send_attachments(
+    ): Short
     fun uniffi_lampcord_ffi_checksum_method_lampcordclient_send_message(
     ): Short
     fun uniffi_lampcord_ffi_checksum_method_lampcordclient_send_mfa_sms(
     ): Short
     fun uniffi_lampcord_ffi_checksum_method_lampcordclient_send_typing(
+    ): Short
+    fun uniffi_lampcord_ffi_checksum_method_lampcordclient_set_custom_status(
     ): Short
     fun uniffi_lampcord_ffi_checksum_method_lampcordclient_set_member_list_ranges(
     ): Short
@@ -1150,6 +1174,12 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     if (lib.uniffi_lampcord_ffi_checksum_method_lampcordclient_fetch_messages() != 39570.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_lampcord_ffi_checksum_method_lampcordclient_fetch_pins() != 51463.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_lampcord_ffi_checksum_method_lampcordclient_fetch_profile() != 27165.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_lampcord_ffi_checksum_method_lampcordclient_forgot_password() != 18647.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1171,6 +1201,9 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     if (lib.uniffi_lampcord_ffi_checksum_method_lampcordclient_send() != 20879.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_lampcord_ffi_checksum_method_lampcordclient_send_attachments() != 44073.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_lampcord_ffi_checksum_method_lampcordclient_send_message() != 8527.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1178,6 +1211,9 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_lampcord_ffi_checksum_method_lampcordclient_send_typing() != 50922.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_lampcord_ffi_checksum_method_lampcordclient_set_custom_status() != 65315.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_lampcord_ffi_checksum_method_lampcordclient_set_member_list_ranges() != 8229.toShort()) {
@@ -1358,6 +1394,29 @@ public object FfiConverterULong: FfiConverter<ULong, Long> {
 
     override fun write(value: ULong, buf: ByteBuffer) {
         buf.putLong(value.toLong())
+    }
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterLong: FfiConverter<Long, Long> {
+    override fun lift(value: Long): Long {
+        return value
+    }
+
+    override fun read(buf: ByteBuffer): Long {
+        return buf.getLong()
+    }
+
+    override fun lower(value: Long): Long {
+        return value
+    }
+
+    override fun allocationSize(value: Long) = 8UL
+
+    override fun write(value: Long, buf: ByteBuffer) {
+        buf.putLong(value)
     }
 }
 
@@ -1625,6 +1684,10 @@ public interface LampcordClientInterface {
     
     fun `fetchMessages`(`channelId`: kotlin.ULong, `before`: kotlin.ULong?, `limit`: kotlin.UByte?)
     
+    fun `fetchPins`(`channelId`: kotlin.ULong)
+    
+    fun `fetchProfile`(`userId`: kotlin.ULong, `guildId`: kotlin.ULong?)
+    
     fun `forgotPassword`(`login`: kotlin.String)
     
     fun `loginPassword`(`login`: kotlin.String, `password`: kotlin.String, `captchaKey`: kotlin.String?)
@@ -1639,11 +1702,15 @@ public interface LampcordClientInterface {
     
     fun `send`(`command`: ClientCommand)
     
+    fun `sendAttachments`(`channelId`: kotlin.ULong, `content`: kotlin.String, `filePaths`: List<kotlin.String>, `replyToMessageId`: kotlin.ULong?, `replyToGuildId`: kotlin.ULong?)
+    
     fun `sendMessage`(`channelId`: kotlin.ULong, `content`: kotlin.String, `replyToMessageId`: kotlin.ULong?, `replyToGuildId`: kotlin.ULong?)
     
     fun `sendMfaSms`(`ticket`: kotlin.String)
     
     fun `sendTyping`(`channelId`: kotlin.ULong)
+    
+    fun `setCustomStatus`(`text`: kotlin.String?)
     
     fun `setMemberListRanges`(`ranges`: List<List<kotlin.UInt>>)
     
@@ -1868,6 +1935,30 @@ open class LampcordClient: Disposable, AutoCloseable, LampcordClientInterface {
     
 
     
+    @Throws(FfiClientException::class)override fun `fetchPins`(`channelId`: kotlin.ULong)
+        = 
+    callWithPointer {
+    uniffiRustCallWithError(FfiClientException) { _status ->
+    UniffiLib.INSTANCE.uniffi_lampcord_ffi_fn_method_lampcordclient_fetch_pins(
+        it, FfiConverterULong.lower(`channelId`),_status)
+}
+    }
+    
+    
+
+    
+    @Throws(FfiClientException::class)override fun `fetchProfile`(`userId`: kotlin.ULong, `guildId`: kotlin.ULong?)
+        = 
+    callWithPointer {
+    uniffiRustCallWithError(FfiClientException) { _status ->
+    UniffiLib.INSTANCE.uniffi_lampcord_ffi_fn_method_lampcordclient_fetch_profile(
+        it, FfiConverterULong.lower(`userId`),FfiConverterOptionalULong.lower(`guildId`),_status)
+}
+    }
+    
+    
+
+    
     @Throws(FfiClientException::class)override fun `forgotPassword`(`login`: kotlin.String)
         = 
     callWithPointer {
@@ -1952,6 +2043,18 @@ open class LampcordClient: Disposable, AutoCloseable, LampcordClientInterface {
     
 
     
+    @Throws(FfiClientException::class)override fun `sendAttachments`(`channelId`: kotlin.ULong, `content`: kotlin.String, `filePaths`: List<kotlin.String>, `replyToMessageId`: kotlin.ULong?, `replyToGuildId`: kotlin.ULong?)
+        = 
+    callWithPointer {
+    uniffiRustCallWithError(FfiClientException) { _status ->
+    UniffiLib.INSTANCE.uniffi_lampcord_ffi_fn_method_lampcordclient_send_attachments(
+        it, FfiConverterULong.lower(`channelId`),FfiConverterString.lower(`content`),FfiConverterSequenceString.lower(`filePaths`),FfiConverterOptionalULong.lower(`replyToMessageId`),FfiConverterOptionalULong.lower(`replyToGuildId`),_status)
+}
+    }
+    
+    
+
+    
     @Throws(FfiClientException::class)override fun `sendMessage`(`channelId`: kotlin.ULong, `content`: kotlin.String, `replyToMessageId`: kotlin.ULong?, `replyToGuildId`: kotlin.ULong?)
         = 
     callWithPointer {
@@ -1982,6 +2085,18 @@ open class LampcordClient: Disposable, AutoCloseable, LampcordClientInterface {
     uniffiRustCallWithError(FfiClientException) { _status ->
     UniffiLib.INSTANCE.uniffi_lampcord_ffi_fn_method_lampcordclient_send_typing(
         it, FfiConverterULong.lower(`channelId`),_status)
+}
+    }
+    
+    
+
+    
+    @Throws(FfiClientException::class)override fun `setCustomStatus`(`text`: kotlin.String?)
+        = 
+    callWithPointer {
+    uniffiRustCallWithError(FfiClientException) { _status ->
+    UniffiLib.INSTANCE.uniffi_lampcord_ffi_fn_method_lampcordclient_set_custom_status(
+        it, FfiConverterOptionalString.lower(`text`),_status)
 }
     }
     
@@ -2505,6 +2620,62 @@ public object FfiConverterTypePlatformSecretStore: FfiConverter<PlatformSecretSt
 
 
 
+data class AttachmentSnapshot (
+    var `id`: kotlin.ULong, 
+    var `filename`: kotlin.String, 
+    var `url`: kotlin.String, 
+    var `proxyUrl`: kotlin.String?, 
+    var `contentType`: kotlin.String?, 
+    var `size`: kotlin.ULong, 
+    var `width`: kotlin.UInt?, 
+    var `height`: kotlin.UInt?
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeAttachmentSnapshot: FfiConverterRustBuffer<AttachmentSnapshot> {
+    override fun read(buf: ByteBuffer): AttachmentSnapshot {
+        return AttachmentSnapshot(
+            FfiConverterULong.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterOptionalUInt.read(buf),
+            FfiConverterOptionalUInt.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: AttachmentSnapshot) = (
+            FfiConverterULong.allocationSize(value.`id`) +
+            FfiConverterString.allocationSize(value.`filename`) +
+            FfiConverterString.allocationSize(value.`url`) +
+            FfiConverterOptionalString.allocationSize(value.`proxyUrl`) +
+            FfiConverterOptionalString.allocationSize(value.`contentType`) +
+            FfiConverterULong.allocationSize(value.`size`) +
+            FfiConverterOptionalUInt.allocationSize(value.`width`) +
+            FfiConverterOptionalUInt.allocationSize(value.`height`)
+    )
+
+    override fun write(value: AttachmentSnapshot, buf: ByteBuffer) {
+            FfiConverterULong.write(value.`id`, buf)
+            FfiConverterString.write(value.`filename`, buf)
+            FfiConverterString.write(value.`url`, buf)
+            FfiConverterOptionalString.write(value.`proxyUrl`, buf)
+            FfiConverterOptionalString.write(value.`contentType`, buf)
+            FfiConverterULong.write(value.`size`, buf)
+            FfiConverterOptionalUInt.write(value.`width`, buf)
+            FfiConverterOptionalUInt.write(value.`height`, buf)
+    }
+}
+
+
+
 data class AuthStateSnapshot (
     var `challenge`: AuthChallenge?, 
     var `remote`: RemoteAuthState
@@ -2532,6 +2703,46 @@ public object FfiConverterTypeAuthStateSnapshot: FfiConverterRustBuffer<AuthStat
     override fun write(value: AuthStateSnapshot, buf: ByteBuffer) {
             FfiConverterOptionalTypeAuthChallenge.write(value.`challenge`, buf)
             FfiConverterTypeRemoteAuthState.write(value.`remote`, buf)
+    }
+}
+
+
+
+data class BadgeSnapshot (
+    var `id`: kotlin.String, 
+    var `description`: kotlin.String, 
+    var `icon`: kotlin.String, 
+    var `link`: kotlin.String?
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeBadgeSnapshot: FfiConverterRustBuffer<BadgeSnapshot> {
+    override fun read(buf: ByteBuffer): BadgeSnapshot {
+        return BadgeSnapshot(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterOptionalString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: BadgeSnapshot) = (
+            FfiConverterString.allocationSize(value.`id`) +
+            FfiConverterString.allocationSize(value.`description`) +
+            FfiConverterString.allocationSize(value.`icon`) +
+            FfiConverterOptionalString.allocationSize(value.`link`)
+    )
+
+    override fun write(value: BadgeSnapshot, buf: ByteBuffer) {
+            FfiConverterString.write(value.`id`, buf)
+            FfiConverterString.write(value.`description`, buf)
+            FfiConverterString.write(value.`icon`, buf)
+            FfiConverterOptionalString.write(value.`link`, buf)
     }
 }
 
@@ -2696,7 +2907,36 @@ data class ClientSnapshot (
     var `memberList`: MemberListSnapshot, 
     var `relationships`: List<RelationshipSnapshot>, 
     var `auth`: AuthStateSnapshot, 
-    var `error`: kotlin.String?
+    var `error`: kotlin.String?, 
+    /**
+     * Schema 3+. DMs and group DMs, most recent first; versioned with `channels`.
+     */
+    var `privateChannels`: List<PrivateChannelSnapshot>, 
+    /**
+     * Schema 3+. The user's server folders in rail order; versioned with `guilds`.
+     */
+    var `guildFolders`: List<GuildFolderSnapshot>, 
+    /**
+     * Schema 3+. Status picked in settings (online, idle, dnd, invisible); part of `meta`.
+     */
+    var `currentUserStatus`: kotlin.String?, 
+    /**
+     * Schema 3+. Custom status text; part of `meta`.
+     */
+    var `currentUserCustomStatus`: kotlin.String?, 
+    /**
+     * Schema 3+. Your avatar frame and nameplate assets; part of `meta`.
+     */
+    var `currentUserDecoration`: kotlin.String?, 
+    var `currentUserNameplate`: kotlin.String?, 
+    /**
+     * Schema 3+. The last profile fetched with FetchProfile; part of `meta`.
+     */
+    var `profile`: ProfileSnapshot?, 
+    /**
+     * Schema 3+. Pins of the selected channel once fetched; versioned with `messages`.
+     */
+    var `pinnedMessages`: List<MessageSnapshot>
 ) {
     
     companion object
@@ -2727,6 +2967,14 @@ public object FfiConverterTypeClientSnapshot: FfiConverterRustBuffer<ClientSnaps
             FfiConverterSequenceTypeRelationshipSnapshot.read(buf),
             FfiConverterTypeAuthStateSnapshot.read(buf),
             FfiConverterOptionalString.read(buf),
+            FfiConverterSequenceTypePrivateChannelSnapshot.read(buf),
+            FfiConverterSequenceTypeGuildFolderSnapshot.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalTypeProfileSnapshot.read(buf),
+            FfiConverterSequenceTypeMessageSnapshot.read(buf),
         )
     }
 
@@ -2749,7 +2997,15 @@ public object FfiConverterTypeClientSnapshot: FfiConverterRustBuffer<ClientSnaps
             FfiConverterTypeMemberListSnapshot.allocationSize(value.`memberList`) +
             FfiConverterSequenceTypeRelationshipSnapshot.allocationSize(value.`relationships`) +
             FfiConverterTypeAuthStateSnapshot.allocationSize(value.`auth`) +
-            FfiConverterOptionalString.allocationSize(value.`error`)
+            FfiConverterOptionalString.allocationSize(value.`error`) +
+            FfiConverterSequenceTypePrivateChannelSnapshot.allocationSize(value.`privateChannels`) +
+            FfiConverterSequenceTypeGuildFolderSnapshot.allocationSize(value.`guildFolders`) +
+            FfiConverterOptionalString.allocationSize(value.`currentUserStatus`) +
+            FfiConverterOptionalString.allocationSize(value.`currentUserCustomStatus`) +
+            FfiConverterOptionalString.allocationSize(value.`currentUserDecoration`) +
+            FfiConverterOptionalString.allocationSize(value.`currentUserNameplate`) +
+            FfiConverterOptionalTypeProfileSnapshot.allocationSize(value.`profile`) +
+            FfiConverterSequenceTypeMessageSnapshot.allocationSize(value.`pinnedMessages`)
     )
 
     override fun write(value: ClientSnapshot, buf: ByteBuffer) {
@@ -2772,6 +3028,14 @@ public object FfiConverterTypeClientSnapshot: FfiConverterRustBuffer<ClientSnaps
             FfiConverterSequenceTypeRelationshipSnapshot.write(value.`relationships`, buf)
             FfiConverterTypeAuthStateSnapshot.write(value.`auth`, buf)
             FfiConverterOptionalString.write(value.`error`, buf)
+            FfiConverterSequenceTypePrivateChannelSnapshot.write(value.`privateChannels`, buf)
+            FfiConverterSequenceTypeGuildFolderSnapshot.write(value.`guildFolders`, buf)
+            FfiConverterOptionalString.write(value.`currentUserStatus`, buf)
+            FfiConverterOptionalString.write(value.`currentUserCustomStatus`, buf)
+            FfiConverterOptionalString.write(value.`currentUserDecoration`, buf)
+            FfiConverterOptionalString.write(value.`currentUserNameplate`, buf)
+            FfiConverterOptionalTypeProfileSnapshot.write(value.`profile`, buf)
+            FfiConverterSequenceTypeMessageSnapshot.write(value.`pinnedMessages`, buf)
     }
 }
 
@@ -2804,6 +3068,49 @@ public object FfiConverterTypeFfiError: FfiConverterRustBuffer<FfiError> {
     override fun write(value: FfiError, buf: ByteBuffer) {
             FfiConverterTypeFfiErrorKind.write(value.`kind`, buf)
             FfiConverterString.write(value.`message`, buf)
+    }
+}
+
+
+
+data class GuildFolderSnapshot (
+    /**
+     * `None` for the nameless wrapper Discord puts around a lone server.
+     */
+    var `id`: kotlin.Long?, 
+    var `name`: kotlin.String?, 
+    var `color`: kotlin.UInt?, 
+    var `guildIds`: List<kotlin.ULong>
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeGuildFolderSnapshot: FfiConverterRustBuffer<GuildFolderSnapshot> {
+    override fun read(buf: ByteBuffer): GuildFolderSnapshot {
+        return GuildFolderSnapshot(
+            FfiConverterOptionalLong.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalUInt.read(buf),
+            FfiConverterSequenceULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: GuildFolderSnapshot) = (
+            FfiConverterOptionalLong.allocationSize(value.`id`) +
+            FfiConverterOptionalString.allocationSize(value.`name`) +
+            FfiConverterOptionalUInt.allocationSize(value.`color`) +
+            FfiConverterSequenceULong.allocationSize(value.`guildIds`)
+    )
+
+    override fun write(value: GuildFolderSnapshot, buf: ByteBuffer) {
+            FfiConverterOptionalLong.write(value.`id`, buf)
+            FfiConverterOptionalString.write(value.`name`, buf)
+            FfiConverterOptionalUInt.write(value.`color`, buf)
+            FfiConverterSequenceULong.write(value.`guildIds`, buf)
     }
 }
 
@@ -2928,7 +3235,19 @@ data class MemberSnapshot (
     var `avatar`: kotlin.String?, 
     var `nickname`: kotlin.String?, 
     var `roles`: List<kotlin.ULong>, 
-    var `status`: kotlin.String?
+    var `status`: kotlin.String?, 
+    /**
+     * Schema 3+.
+     */
+    var `globalName`: kotlin.String?, 
+    /**
+     * Schema 3+. Avatar frame asset (server-specific first).
+     */
+    var `decoration`: kotlin.String?, 
+    /**
+     * Schema 3+. Nameplate collectible asset.
+     */
+    var `nameplate`: kotlin.String?
 ) {
     
     companion object
@@ -2947,6 +3266,9 @@ public object FfiConverterTypeMemberSnapshot: FfiConverterRustBuffer<MemberSnaps
             FfiConverterOptionalString.read(buf),
             FfiConverterSequenceULong.read(buf),
             FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
         )
     }
 
@@ -2957,7 +3279,10 @@ public object FfiConverterTypeMemberSnapshot: FfiConverterRustBuffer<MemberSnaps
             FfiConverterOptionalString.allocationSize(value.`avatar`) +
             FfiConverterOptionalString.allocationSize(value.`nickname`) +
             FfiConverterSequenceULong.allocationSize(value.`roles`) +
-            FfiConverterOptionalString.allocationSize(value.`status`)
+            FfiConverterOptionalString.allocationSize(value.`status`) +
+            FfiConverterOptionalString.allocationSize(value.`globalName`) +
+            FfiConverterOptionalString.allocationSize(value.`decoration`) +
+            FfiConverterOptionalString.allocationSize(value.`nameplate`)
     )
 
     override fun write(value: MemberSnapshot, buf: ByteBuffer) {
@@ -2968,6 +3293,9 @@ public object FfiConverterTypeMemberSnapshot: FfiConverterRustBuffer<MemberSnaps
             FfiConverterOptionalString.write(value.`nickname`, buf)
             FfiConverterSequenceULong.write(value.`roles`, buf)
             FfiConverterOptionalString.write(value.`status`, buf)
+            FfiConverterOptionalString.write(value.`globalName`, buf)
+            FfiConverterOptionalString.write(value.`decoration`, buf)
+            FfiConverterOptionalString.write(value.`nameplate`, buf)
     }
 }
 
@@ -2981,7 +3309,23 @@ data class MessageSnapshot (
     var `authorAvatar`: kotlin.String?, 
     var `content`: kotlin.String, 
     var `timestamp`: kotlin.String, 
-    var `editedTimestamp`: kotlin.String?
+    var `editedTimestamp`: kotlin.String?, 
+    /**
+     * Schema 3+. Discord message type (0 default, 3 call, 6 pin, 7 join, 19 reply, ...).
+     */
+    var `kind`: kotlin.UByte, 
+    /**
+     * Schema 3+. The author's avatar frame asset.
+     */
+    var `authorDecoration`: kotlin.String?, 
+    /**
+     * Schema 3+.
+     */
+    var `attachments`: List<AttachmentSnapshot>, 
+    /**
+     * Schema 3+. A short view of the message this one replies to.
+     */
+    var `reply`: ReplySnapshot?
 ) {
     
     companion object
@@ -3001,6 +3345,10 @@ public object FfiConverterTypeMessageSnapshot: FfiConverterRustBuffer<MessageSna
             FfiConverterString.read(buf),
             FfiConverterString.read(buf),
             FfiConverterOptionalString.read(buf),
+            FfiConverterUByte.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterSequenceTypeAttachmentSnapshot.read(buf),
+            FfiConverterOptionalTypeReplySnapshot.read(buf),
         )
     }
 
@@ -3012,7 +3360,11 @@ public object FfiConverterTypeMessageSnapshot: FfiConverterRustBuffer<MessageSna
             FfiConverterOptionalString.allocationSize(value.`authorAvatar`) +
             FfiConverterString.allocationSize(value.`content`) +
             FfiConverterString.allocationSize(value.`timestamp`) +
-            FfiConverterOptionalString.allocationSize(value.`editedTimestamp`)
+            FfiConverterOptionalString.allocationSize(value.`editedTimestamp`) +
+            FfiConverterUByte.allocationSize(value.`kind`) +
+            FfiConverterOptionalString.allocationSize(value.`authorDecoration`) +
+            FfiConverterSequenceTypeAttachmentSnapshot.allocationSize(value.`attachments`) +
+            FfiConverterOptionalTypeReplySnapshot.allocationSize(value.`reply`)
     )
 
     override fun write(value: MessageSnapshot, buf: ByteBuffer) {
@@ -3024,6 +3376,10 @@ public object FfiConverterTypeMessageSnapshot: FfiConverterRustBuffer<MessageSna
             FfiConverterString.write(value.`content`, buf)
             FfiConverterString.write(value.`timestamp`, buf)
             FfiConverterOptionalString.write(value.`editedTimestamp`, buf)
+            FfiConverterUByte.write(value.`kind`, buf)
+            FfiConverterOptionalString.write(value.`authorDecoration`, buf)
+            FfiConverterSequenceTypeAttachmentSnapshot.write(value.`attachments`, buf)
+            FfiConverterOptionalTypeReplySnapshot.write(value.`reply`, buf)
     }
 }
 
@@ -3032,7 +3388,15 @@ public object FfiConverterTypeMessageSnapshot: FfiConverterRustBuffer<MessageSna
 data class PresenceSnapshot (
     var `userId`: kotlin.ULong, 
     var `status`: kotlin.String, 
-    var `activities`: List<kotlin.String>
+    var `activities`: List<kotlin.String>, 
+    /**
+     * Schema 3+. Custom status text, kept out of `activities`.
+     */
+    var `customStatus`: kotlin.String?, 
+    /**
+     * Schema 3+. Online only from a phone.
+     */
+    var `mobile`: kotlin.Boolean
 ) {
     
     companion object
@@ -3047,19 +3411,176 @@ public object FfiConverterTypePresenceSnapshot: FfiConverterRustBuffer<PresenceS
             FfiConverterULong.read(buf),
             FfiConverterString.read(buf),
             FfiConverterSequenceString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterBoolean.read(buf),
         )
     }
 
     override fun allocationSize(value: PresenceSnapshot) = (
             FfiConverterULong.allocationSize(value.`userId`) +
             FfiConverterString.allocationSize(value.`status`) +
-            FfiConverterSequenceString.allocationSize(value.`activities`)
+            FfiConverterSequenceString.allocationSize(value.`activities`) +
+            FfiConverterOptionalString.allocationSize(value.`customStatus`) +
+            FfiConverterBoolean.allocationSize(value.`mobile`)
     )
 
     override fun write(value: PresenceSnapshot, buf: ByteBuffer) {
             FfiConverterULong.write(value.`userId`, buf)
             FfiConverterString.write(value.`status`, buf)
             FfiConverterSequenceString.write(value.`activities`, buf)
+            FfiConverterOptionalString.write(value.`customStatus`, buf)
+            FfiConverterBoolean.write(value.`mobile`, buf)
+    }
+}
+
+
+
+data class PrivateChannelSnapshot (
+    var `id`: kotlin.ULong, 
+    /**
+     * 1 for a DM, 3 for a group DM.
+     */
+    var `kind`: kotlin.UByte, 
+    /**
+     * Only group DMs can have a name.
+     */
+    var `name`: kotlin.String?, 
+    var `recipients`: List<RecipientSnapshot>, 
+    var `lastMessageId`: kotlin.ULong?
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypePrivateChannelSnapshot: FfiConverterRustBuffer<PrivateChannelSnapshot> {
+    override fun read(buf: ByteBuffer): PrivateChannelSnapshot {
+        return PrivateChannelSnapshot(
+            FfiConverterULong.read(buf),
+            FfiConverterUByte.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterSequenceTypeRecipientSnapshot.read(buf),
+            FfiConverterOptionalULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: PrivateChannelSnapshot) = (
+            FfiConverterULong.allocationSize(value.`id`) +
+            FfiConverterUByte.allocationSize(value.`kind`) +
+            FfiConverterOptionalString.allocationSize(value.`name`) +
+            FfiConverterSequenceTypeRecipientSnapshot.allocationSize(value.`recipients`) +
+            FfiConverterOptionalULong.allocationSize(value.`lastMessageId`)
+    )
+
+    override fun write(value: PrivateChannelSnapshot, buf: ByteBuffer) {
+            FfiConverterULong.write(value.`id`, buf)
+            FfiConverterUByte.write(value.`kind`, buf)
+            FfiConverterOptionalString.write(value.`name`, buf)
+            FfiConverterSequenceTypeRecipientSnapshot.write(value.`recipients`, buf)
+            FfiConverterOptionalULong.write(value.`lastMessageId`, buf)
+    }
+}
+
+
+
+/**
+ * A user profile as shown on profile cards. Server-specific values (guild
+ * member profile) already override the account's.
+ */
+data class ProfileSnapshot (
+    var `userId`: kotlin.ULong, 
+    var `guildId`: kotlin.ULong?, 
+    var `username`: kotlin.String, 
+    var `globalName`: kotlin.String?, 
+    var `nickname`: kotlin.String?, 
+    var `avatar`: kotlin.String?, 
+    /**
+     * Banner image URL, server banner first.
+     */
+    var `bannerUrl`: kotlin.String?, 
+    var `accentColor`: kotlin.UInt?, 
+    /**
+     * The two Nitro profile theme colours, when set.
+     */
+    var `themeColors`: List<kotlin.UInt>, 
+    var `bio`: kotlin.String?, 
+    var `pronouns`: kotlin.String?, 
+    var `decoration`: kotlin.String?, 
+    var `badges`: List<BadgeSnapshot>, 
+    var `mutualGuildIds`: List<kotlin.ULong>, 
+    var `mutualFriendsCount`: kotlin.UInt?, 
+    /**
+     * ISO timestamp of joining the server the profile was opened from.
+     */
+    var `joinedAt`: kotlin.String?
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeProfileSnapshot: FfiConverterRustBuffer<ProfileSnapshot> {
+    override fun read(buf: ByteBuffer): ProfileSnapshot {
+        return ProfileSnapshot(
+            FfiConverterULong.read(buf),
+            FfiConverterOptionalULong.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalUInt.read(buf),
+            FfiConverterSequenceUInt.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterSequenceTypeBadgeSnapshot.read(buf),
+            FfiConverterSequenceULong.read(buf),
+            FfiConverterOptionalUInt.read(buf),
+            FfiConverterOptionalString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: ProfileSnapshot) = (
+            FfiConverterULong.allocationSize(value.`userId`) +
+            FfiConverterOptionalULong.allocationSize(value.`guildId`) +
+            FfiConverterString.allocationSize(value.`username`) +
+            FfiConverterOptionalString.allocationSize(value.`globalName`) +
+            FfiConverterOptionalString.allocationSize(value.`nickname`) +
+            FfiConverterOptionalString.allocationSize(value.`avatar`) +
+            FfiConverterOptionalString.allocationSize(value.`bannerUrl`) +
+            FfiConverterOptionalUInt.allocationSize(value.`accentColor`) +
+            FfiConverterSequenceUInt.allocationSize(value.`themeColors`) +
+            FfiConverterOptionalString.allocationSize(value.`bio`) +
+            FfiConverterOptionalString.allocationSize(value.`pronouns`) +
+            FfiConverterOptionalString.allocationSize(value.`decoration`) +
+            FfiConverterSequenceTypeBadgeSnapshot.allocationSize(value.`badges`) +
+            FfiConverterSequenceULong.allocationSize(value.`mutualGuildIds`) +
+            FfiConverterOptionalUInt.allocationSize(value.`mutualFriendsCount`) +
+            FfiConverterOptionalString.allocationSize(value.`joinedAt`)
+    )
+
+    override fun write(value: ProfileSnapshot, buf: ByteBuffer) {
+            FfiConverterULong.write(value.`userId`, buf)
+            FfiConverterOptionalULong.write(value.`guildId`, buf)
+            FfiConverterString.write(value.`username`, buf)
+            FfiConverterOptionalString.write(value.`globalName`, buf)
+            FfiConverterOptionalString.write(value.`nickname`, buf)
+            FfiConverterOptionalString.write(value.`avatar`, buf)
+            FfiConverterOptionalString.write(value.`bannerUrl`, buf)
+            FfiConverterOptionalUInt.write(value.`accentColor`, buf)
+            FfiConverterSequenceUInt.write(value.`themeColors`, buf)
+            FfiConverterOptionalString.write(value.`bio`, buf)
+            FfiConverterOptionalString.write(value.`pronouns`, buf)
+            FfiConverterOptionalString.write(value.`decoration`, buf)
+            FfiConverterSequenceTypeBadgeSnapshot.write(value.`badges`, buf)
+            FfiConverterSequenceULong.write(value.`mutualGuildIds`, buf)
+            FfiConverterOptionalUInt.write(value.`mutualFriendsCount`, buf)
+            FfiConverterOptionalString.write(value.`joinedAt`, buf)
     }
 }
 
@@ -3113,7 +3634,15 @@ data class RecipientSnapshot (
     var `id`: kotlin.ULong, 
     var `username`: kotlin.String, 
     var `globalName`: kotlin.String?, 
-    var `avatar`: kotlin.String?
+    var `avatar`: kotlin.String?, 
+    /**
+     * Avatar frame (decoration preset) asset.
+     */
+    var `decoration`: kotlin.String?, 
+    /**
+     * Nameplate collectible asset.
+     */
+    var `nameplate`: kotlin.String?
 ) {
     
     companion object
@@ -3129,6 +3658,8 @@ public object FfiConverterTypeRecipientSnapshot: FfiConverterRustBuffer<Recipien
             FfiConverterString.read(buf),
             FfiConverterOptionalString.read(buf),
             FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
         )
     }
 
@@ -3136,7 +3667,9 @@ public object FfiConverterTypeRecipientSnapshot: FfiConverterRustBuffer<Recipien
             FfiConverterULong.allocationSize(value.`id`) +
             FfiConverterString.allocationSize(value.`username`) +
             FfiConverterOptionalString.allocationSize(value.`globalName`) +
-            FfiConverterOptionalString.allocationSize(value.`avatar`)
+            FfiConverterOptionalString.allocationSize(value.`avatar`) +
+            FfiConverterOptionalString.allocationSize(value.`decoration`) +
+            FfiConverterOptionalString.allocationSize(value.`nameplate`)
     )
 
     override fun write(value: RecipientSnapshot, buf: ByteBuffer) {
@@ -3144,6 +3677,8 @@ public object FfiConverterTypeRecipientSnapshot: FfiConverterRustBuffer<Recipien
             FfiConverterString.write(value.`username`, buf)
             FfiConverterOptionalString.write(value.`globalName`, buf)
             FfiConverterOptionalString.write(value.`avatar`, buf)
+            FfiConverterOptionalString.write(value.`decoration`, buf)
+            FfiConverterOptionalString.write(value.`nameplate`, buf)
     }
 }
 
@@ -3197,12 +3732,61 @@ public object FfiConverterTypeRelationshipSnapshot: FfiConverterRustBuffer<Relat
 
 
 
+data class ReplySnapshot (
+    var `messageId`: kotlin.ULong, 
+    var `authorId`: kotlin.ULong, 
+    var `authorName`: kotlin.String, 
+    var `authorAvatar`: kotlin.String?, 
+    var `content`: kotlin.String
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeReplySnapshot: FfiConverterRustBuffer<ReplySnapshot> {
+    override fun read(buf: ByteBuffer): ReplySnapshot {
+        return ReplySnapshot(
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: ReplySnapshot) = (
+            FfiConverterULong.allocationSize(value.`messageId`) +
+            FfiConverterULong.allocationSize(value.`authorId`) +
+            FfiConverterString.allocationSize(value.`authorName`) +
+            FfiConverterOptionalString.allocationSize(value.`authorAvatar`) +
+            FfiConverterString.allocationSize(value.`content`)
+    )
+
+    override fun write(value: ReplySnapshot, buf: ByteBuffer) {
+            FfiConverterULong.write(value.`messageId`, buf)
+            FfiConverterULong.write(value.`authorId`, buf)
+            FfiConverterString.write(value.`authorName`, buf)
+            FfiConverterOptionalString.write(value.`authorAvatar`, buf)
+            FfiConverterString.write(value.`content`, buf)
+    }
+}
+
+
+
 data class SnapshotMetaPatch (
     var `connection`: ConnectionState, 
     var `hasToken`: kotlin.Boolean, 
     var `currentUserId`: kotlin.ULong?, 
     var `currentUser`: kotlin.String?, 
     var `currentUserAvatar`: kotlin.String?, 
+    var `currentUserStatus`: kotlin.String?, 
+    var `currentUserCustomStatus`: kotlin.String?, 
+    var `currentUserDecoration`: kotlin.String?, 
+    var `currentUserNameplate`: kotlin.String?, 
+    var `profile`: ProfileSnapshot?, 
     var `selectedGuildId`: kotlin.ULong?, 
     var `selectedChannelId`: kotlin.ULong?, 
     var `auth`: AuthStateSnapshot, 
@@ -3223,6 +3807,11 @@ public object FfiConverterTypeSnapshotMetaPatch: FfiConverterRustBuffer<Snapshot
             FfiConverterOptionalULong.read(buf),
             FfiConverterOptionalString.read(buf),
             FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalTypeProfileSnapshot.read(buf),
             FfiConverterOptionalULong.read(buf),
             FfiConverterOptionalULong.read(buf),
             FfiConverterTypeAuthStateSnapshot.read(buf),
@@ -3236,6 +3825,11 @@ public object FfiConverterTypeSnapshotMetaPatch: FfiConverterRustBuffer<Snapshot
             FfiConverterOptionalULong.allocationSize(value.`currentUserId`) +
             FfiConverterOptionalString.allocationSize(value.`currentUser`) +
             FfiConverterOptionalString.allocationSize(value.`currentUserAvatar`) +
+            FfiConverterOptionalString.allocationSize(value.`currentUserStatus`) +
+            FfiConverterOptionalString.allocationSize(value.`currentUserCustomStatus`) +
+            FfiConverterOptionalString.allocationSize(value.`currentUserDecoration`) +
+            FfiConverterOptionalString.allocationSize(value.`currentUserNameplate`) +
+            FfiConverterOptionalTypeProfileSnapshot.allocationSize(value.`profile`) +
             FfiConverterOptionalULong.allocationSize(value.`selectedGuildId`) +
             FfiConverterOptionalULong.allocationSize(value.`selectedChannelId`) +
             FfiConverterTypeAuthStateSnapshot.allocationSize(value.`auth`) +
@@ -3248,6 +3842,11 @@ public object FfiConverterTypeSnapshotMetaPatch: FfiConverterRustBuffer<Snapshot
             FfiConverterOptionalULong.write(value.`currentUserId`, buf)
             FfiConverterOptionalString.write(value.`currentUser`, buf)
             FfiConverterOptionalString.write(value.`currentUserAvatar`, buf)
+            FfiConverterOptionalString.write(value.`currentUserStatus`, buf)
+            FfiConverterOptionalString.write(value.`currentUserCustomStatus`, buf)
+            FfiConverterOptionalString.write(value.`currentUserDecoration`, buf)
+            FfiConverterOptionalString.write(value.`currentUserNameplate`, buf)
+            FfiConverterOptionalTypeProfileSnapshot.write(value.`profile`, buf)
             FfiConverterOptionalULong.write(value.`selectedGuildId`, buf)
             FfiConverterOptionalULong.write(value.`selectedChannelId`, buf)
             FfiConverterTypeAuthStateSnapshot.write(value.`auth`, buf)
@@ -3265,9 +3864,12 @@ data class SnapshotPatch (
     var `guilds`: List<GuildSnapshot>?, 
     var `channels`: List<ChannelSnapshot>?, 
     var `messages`: List<MessageSnapshot>?, 
+    var `pinnedMessages`: List<MessageSnapshot>?, 
     var `members`: List<MemberSnapshot>?, 
     var `presences`: List<PresenceSnapshot>?, 
     var `readStates`: List<ReadStateSnapshot>?, 
+    var `privateChannels`: List<PrivateChannelSnapshot>?, 
+    var `guildFolders`: List<GuildFolderSnapshot>?, 
     var `memberList`: MemberListSnapshot?, 
     var `relationships`: List<RelationshipSnapshot>
 ) {
@@ -3288,9 +3890,12 @@ public object FfiConverterTypeSnapshotPatch: FfiConverterRustBuffer<SnapshotPatc
             FfiConverterOptionalSequenceTypeGuildSnapshot.read(buf),
             FfiConverterOptionalSequenceTypeChannelSnapshot.read(buf),
             FfiConverterOptionalSequenceTypeMessageSnapshot.read(buf),
+            FfiConverterOptionalSequenceTypeMessageSnapshot.read(buf),
             FfiConverterOptionalSequenceTypeMemberSnapshot.read(buf),
             FfiConverterOptionalSequenceTypePresenceSnapshot.read(buf),
             FfiConverterOptionalSequenceTypeReadStateSnapshot.read(buf),
+            FfiConverterOptionalSequenceTypePrivateChannelSnapshot.read(buf),
+            FfiConverterOptionalSequenceTypeGuildFolderSnapshot.read(buf),
             FfiConverterOptionalTypeMemberListSnapshot.read(buf),
             FfiConverterSequenceTypeRelationshipSnapshot.read(buf),
         )
@@ -3304,9 +3909,12 @@ public object FfiConverterTypeSnapshotPatch: FfiConverterRustBuffer<SnapshotPatc
             FfiConverterOptionalSequenceTypeGuildSnapshot.allocationSize(value.`guilds`) +
             FfiConverterOptionalSequenceTypeChannelSnapshot.allocationSize(value.`channels`) +
             FfiConverterOptionalSequenceTypeMessageSnapshot.allocationSize(value.`messages`) +
+            FfiConverterOptionalSequenceTypeMessageSnapshot.allocationSize(value.`pinnedMessages`) +
             FfiConverterOptionalSequenceTypeMemberSnapshot.allocationSize(value.`members`) +
             FfiConverterOptionalSequenceTypePresenceSnapshot.allocationSize(value.`presences`) +
             FfiConverterOptionalSequenceTypeReadStateSnapshot.allocationSize(value.`readStates`) +
+            FfiConverterOptionalSequenceTypePrivateChannelSnapshot.allocationSize(value.`privateChannels`) +
+            FfiConverterOptionalSequenceTypeGuildFolderSnapshot.allocationSize(value.`guildFolders`) +
             FfiConverterOptionalTypeMemberListSnapshot.allocationSize(value.`memberList`) +
             FfiConverterSequenceTypeRelationshipSnapshot.allocationSize(value.`relationships`)
     )
@@ -3319,9 +3927,12 @@ public object FfiConverterTypeSnapshotPatch: FfiConverterRustBuffer<SnapshotPatc
             FfiConverterOptionalSequenceTypeGuildSnapshot.write(value.`guilds`, buf)
             FfiConverterOptionalSequenceTypeChannelSnapshot.write(value.`channels`, buf)
             FfiConverterOptionalSequenceTypeMessageSnapshot.write(value.`messages`, buf)
+            FfiConverterOptionalSequenceTypeMessageSnapshot.write(value.`pinnedMessages`, buf)
             FfiConverterOptionalSequenceTypeMemberSnapshot.write(value.`members`, buf)
             FfiConverterOptionalSequenceTypePresenceSnapshot.write(value.`presences`, buf)
             FfiConverterOptionalSequenceTypeReadStateSnapshot.write(value.`readStates`, buf)
+            FfiConverterOptionalSequenceTypePrivateChannelSnapshot.write(value.`privateChannels`, buf)
+            FfiConverterOptionalSequenceTypeGuildFolderSnapshot.write(value.`guildFolders`, buf)
             FfiConverterOptionalTypeMemberListSnapshot.write(value.`memberList`, buf)
             FfiConverterSequenceTypeRelationshipSnapshot.write(value.`relationships`, buf)
     }
@@ -3689,6 +4300,43 @@ sealed class ClientCommand {
         companion object
     }
     
+    /**
+     * Loads a profile into `ClientSnapshot.profile`.
+     */
+    data class FetchProfile(
+        val `userId`: kotlin.ULong, 
+        val `guildId`: kotlin.ULong?) : ClientCommand() {
+        companion object
+    }
+    
+    /**
+     * Sets (or with `None`, clears) the custom status text.
+     */
+    data class SetCustomStatus(
+        val `text`: kotlin.String?) : ClientCommand() {
+        companion object
+    }
+    
+    /**
+     * Loads the channel's pinned messages into `ClientSnapshot.pinned_messages`.
+     */
+    data class FetchPins(
+        val `channelId`: kotlin.ULong) : ClientCommand() {
+        companion object
+    }
+    
+    /**
+     * Uploads local files and sends them with `content` as one message.
+     */
+    data class SendAttachments(
+        val `channelId`: kotlin.ULong, 
+        val `content`: kotlin.String, 
+        val `filePaths`: List<kotlin.String>, 
+        val `replyToMessageId`: kotlin.ULong?, 
+        val `replyToGuildId`: kotlin.ULong?) : ClientCommand() {
+        companion object
+    }
+    
     data class EditMessage(
         val `channelId`: kotlin.ULong, 
         val `messageId`: kotlin.ULong, 
@@ -3795,37 +4443,54 @@ public object FfiConverterTypeClientCommand : FfiConverterRustBuffer<ClientComma
                 FfiConverterOptionalULong.read(buf),
                 FfiConverterOptionalULong.read(buf),
                 )
-            15 -> ClientCommand.EditMessage(
+            15 -> ClientCommand.FetchProfile(
+                FfiConverterULong.read(buf),
+                FfiConverterOptionalULong.read(buf),
+                )
+            16 -> ClientCommand.SetCustomStatus(
+                FfiConverterOptionalString.read(buf),
+                )
+            17 -> ClientCommand.FetchPins(
+                FfiConverterULong.read(buf),
+                )
+            18 -> ClientCommand.SendAttachments(
+                FfiConverterULong.read(buf),
+                FfiConverterString.read(buf),
+                FfiConverterSequenceString.read(buf),
+                FfiConverterOptionalULong.read(buf),
+                FfiConverterOptionalULong.read(buf),
+                )
+            19 -> ClientCommand.EditMessage(
                 FfiConverterULong.read(buf),
                 FfiConverterULong.read(buf),
                 FfiConverterString.read(buf),
                 )
-            16 -> ClientCommand.DeleteMessage(
+            20 -> ClientCommand.DeleteMessage(
                 FfiConverterULong.read(buf),
                 FfiConverterULong.read(buf),
                 )
-            17 -> ClientCommand.AddReaction(
+            21 -> ClientCommand.AddReaction(
                 FfiConverterULong.read(buf),
                 FfiConverterULong.read(buf),
                 FfiConverterString.read(buf),
                 )
-            18 -> ClientCommand.RemoveReaction(
+            22 -> ClientCommand.RemoveReaction(
                 FfiConverterULong.read(buf),
                 FfiConverterULong.read(buf),
                 FfiConverterString.read(buf),
                 )
-            19 -> ClientCommand.SendTyping(
+            23 -> ClientCommand.SendTyping(
                 FfiConverterULong.read(buf),
                 )
-            20 -> ClientCommand.SetStatus(
+            24 -> ClientCommand.SetStatus(
                 FfiConverterString.read(buf),
                 )
-            21 -> ClientCommand.AckMessage(
+            25 -> ClientCommand.AckMessage(
                 FfiConverterULong.read(buf),
                 FfiConverterULong.read(buf),
                 )
-            22 -> ClientCommand.Logout
-            23 -> ClientCommand.Shutdown
+            26 -> ClientCommand.Logout
+            27 -> ClientCommand.Shutdown
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -3932,6 +4597,39 @@ public object FfiConverterTypeClientCommand : FfiConverterRustBuffer<ClientComma
                 4UL
                 + FfiConverterULong.allocationSize(value.`channelId`)
                 + FfiConverterString.allocationSize(value.`content`)
+                + FfiConverterOptionalULong.allocationSize(value.`replyToMessageId`)
+                + FfiConverterOptionalULong.allocationSize(value.`replyToGuildId`)
+            )
+        }
+        is ClientCommand.FetchProfile -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.`userId`)
+                + FfiConverterOptionalULong.allocationSize(value.`guildId`)
+            )
+        }
+        is ClientCommand.SetCustomStatus -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterOptionalString.allocationSize(value.`text`)
+            )
+        }
+        is ClientCommand.FetchPins -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.`channelId`)
+            )
+        }
+        is ClientCommand.SendAttachments -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.`channelId`)
+                + FfiConverterString.allocationSize(value.`content`)
+                + FfiConverterSequenceString.allocationSize(value.`filePaths`)
                 + FfiConverterOptionalULong.allocationSize(value.`replyToMessageId`)
                 + FfiConverterOptionalULong.allocationSize(value.`replyToGuildId`)
             )
@@ -4086,55 +4784,80 @@ public object FfiConverterTypeClientCommand : FfiConverterRustBuffer<ClientComma
                 FfiConverterOptionalULong.write(value.`replyToGuildId`, buf)
                 Unit
             }
-            is ClientCommand.EditMessage -> {
+            is ClientCommand.FetchProfile -> {
                 buf.putInt(15)
+                FfiConverterULong.write(value.`userId`, buf)
+                FfiConverterOptionalULong.write(value.`guildId`, buf)
+                Unit
+            }
+            is ClientCommand.SetCustomStatus -> {
+                buf.putInt(16)
+                FfiConverterOptionalString.write(value.`text`, buf)
+                Unit
+            }
+            is ClientCommand.FetchPins -> {
+                buf.putInt(17)
+                FfiConverterULong.write(value.`channelId`, buf)
+                Unit
+            }
+            is ClientCommand.SendAttachments -> {
+                buf.putInt(18)
+                FfiConverterULong.write(value.`channelId`, buf)
+                FfiConverterString.write(value.`content`, buf)
+                FfiConverterSequenceString.write(value.`filePaths`, buf)
+                FfiConverterOptionalULong.write(value.`replyToMessageId`, buf)
+                FfiConverterOptionalULong.write(value.`replyToGuildId`, buf)
+                Unit
+            }
+            is ClientCommand.EditMessage -> {
+                buf.putInt(19)
                 FfiConverterULong.write(value.`channelId`, buf)
                 FfiConverterULong.write(value.`messageId`, buf)
                 FfiConverterString.write(value.`content`, buf)
                 Unit
             }
             is ClientCommand.DeleteMessage -> {
-                buf.putInt(16)
+                buf.putInt(20)
                 FfiConverterULong.write(value.`channelId`, buf)
                 FfiConverterULong.write(value.`messageId`, buf)
                 Unit
             }
             is ClientCommand.AddReaction -> {
-                buf.putInt(17)
+                buf.putInt(21)
                 FfiConverterULong.write(value.`channelId`, buf)
                 FfiConverterULong.write(value.`messageId`, buf)
                 FfiConverterString.write(value.`emoji`, buf)
                 Unit
             }
             is ClientCommand.RemoveReaction -> {
-                buf.putInt(18)
+                buf.putInt(22)
                 FfiConverterULong.write(value.`channelId`, buf)
                 FfiConverterULong.write(value.`messageId`, buf)
                 FfiConverterString.write(value.`emoji`, buf)
                 Unit
             }
             is ClientCommand.SendTyping -> {
-                buf.putInt(19)
+                buf.putInt(23)
                 FfiConverterULong.write(value.`channelId`, buf)
                 Unit
             }
             is ClientCommand.SetStatus -> {
-                buf.putInt(20)
+                buf.putInt(24)
                 FfiConverterString.write(value.`status`, buf)
                 Unit
             }
             is ClientCommand.AckMessage -> {
-                buf.putInt(21)
+                buf.putInt(25)
                 FfiConverterULong.write(value.`channelId`, buf)
                 FfiConverterULong.write(value.`messageId`, buf)
                 Unit
             }
             is ClientCommand.Logout -> {
-                buf.putInt(22)
+                buf.putInt(26)
                 Unit
             }
             is ClientCommand.Shutdown -> {
-                buf.putInt(23)
+                buf.putInt(27)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -4950,6 +5673,38 @@ public object FfiConverterOptionalULong: FfiConverterRustBuffer<kotlin.ULong?> {
 /**
  * @suppress
  */
+public object FfiConverterOptionalLong: FfiConverterRustBuffer<kotlin.Long?> {
+    override fun read(buf: ByteBuffer): kotlin.Long? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterLong.read(buf)
+    }
+
+    override fun allocationSize(value: kotlin.Long?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterLong.allocationSize(value)
+        }
+    }
+
+    override fun write(value: kotlin.Long?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterLong.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterOptionalString: FfiConverterRustBuffer<kotlin.String?> {
     override fun read(buf: ByteBuffer): kotlin.String? {
         if (buf.get().toInt() == 0) {
@@ -5078,6 +5833,70 @@ public object FfiConverterOptionalTypeMemberSnapshot: FfiConverterRustBuffer<Mem
 /**
  * @suppress
  */
+public object FfiConverterOptionalTypeProfileSnapshot: FfiConverterRustBuffer<ProfileSnapshot?> {
+    override fun read(buf: ByteBuffer): ProfileSnapshot? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeProfileSnapshot.read(buf)
+    }
+
+    override fun allocationSize(value: ProfileSnapshot?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeProfileSnapshot.allocationSize(value)
+        }
+    }
+
+    override fun write(value: ProfileSnapshot?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeProfileSnapshot.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeReplySnapshot: FfiConverterRustBuffer<ReplySnapshot?> {
+    override fun read(buf: ByteBuffer): ReplySnapshot? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeReplySnapshot.read(buf)
+    }
+
+    override fun allocationSize(value: ReplySnapshot?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeReplySnapshot.allocationSize(value)
+        }
+    }
+
+    override fun write(value: ReplySnapshot?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeReplySnapshot.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterOptionalTypeSnapshotMetaPatch: FfiConverterRustBuffer<SnapshotMetaPatch?> {
     override fun read(buf: ByteBuffer): SnapshotMetaPatch? {
         if (buf.get().toInt() == 0) {
@@ -5164,6 +5983,38 @@ public object FfiConverterOptionalSequenceTypeChannelSnapshot: FfiConverterRustB
         } else {
             buf.put(1)
             FfiConverterSequenceTypeChannelSnapshot.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalSequenceTypeGuildFolderSnapshot: FfiConverterRustBuffer<List<GuildFolderSnapshot>?> {
+    override fun read(buf: ByteBuffer): List<GuildFolderSnapshot>? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterSequenceTypeGuildFolderSnapshot.read(buf)
+    }
+
+    override fun allocationSize(value: List<GuildFolderSnapshot>?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterSequenceTypeGuildFolderSnapshot.allocationSize(value)
+        }
+    }
+
+    override fun write(value: List<GuildFolderSnapshot>?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterSequenceTypeGuildFolderSnapshot.write(value, buf)
         }
     }
 }
@@ -5302,6 +6153,38 @@ public object FfiConverterOptionalSequenceTypePresenceSnapshot: FfiConverterRust
 /**
  * @suppress
  */
+public object FfiConverterOptionalSequenceTypePrivateChannelSnapshot: FfiConverterRustBuffer<List<PrivateChannelSnapshot>?> {
+    override fun read(buf: ByteBuffer): List<PrivateChannelSnapshot>? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterSequenceTypePrivateChannelSnapshot.read(buf)
+    }
+
+    override fun allocationSize(value: List<PrivateChannelSnapshot>?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterSequenceTypePrivateChannelSnapshot.allocationSize(value)
+        }
+    }
+
+    override fun write(value: List<PrivateChannelSnapshot>?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterSequenceTypePrivateChannelSnapshot.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterOptionalSequenceTypeReadStateSnapshot: FfiConverterRustBuffer<List<ReadStateSnapshot>?> {
     override fun read(buf: ByteBuffer): List<ReadStateSnapshot>? {
         if (buf.get().toInt() == 0) {
@@ -5418,6 +6301,62 @@ public object FfiConverterSequenceString: FfiConverterRustBuffer<List<kotlin.Str
 /**
  * @suppress
  */
+public object FfiConverterSequenceTypeAttachmentSnapshot: FfiConverterRustBuffer<List<AttachmentSnapshot>> {
+    override fun read(buf: ByteBuffer): List<AttachmentSnapshot> {
+        val len = buf.getInt()
+        return List<AttachmentSnapshot>(len) {
+            FfiConverterTypeAttachmentSnapshot.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<AttachmentSnapshot>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeAttachmentSnapshot.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<AttachmentSnapshot>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeAttachmentSnapshot.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeBadgeSnapshot: FfiConverterRustBuffer<List<BadgeSnapshot>> {
+    override fun read(buf: ByteBuffer): List<BadgeSnapshot> {
+        val len = buf.getInt()
+        return List<BadgeSnapshot>(len) {
+            FfiConverterTypeBadgeSnapshot.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<BadgeSnapshot>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeBadgeSnapshot.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<BadgeSnapshot>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeBadgeSnapshot.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterSequenceTypeChannelSnapshot: FfiConverterRustBuffer<List<ChannelSnapshot>> {
     override fun read(buf: ByteBuffer): List<ChannelSnapshot> {
         val len = buf.getInt()
@@ -5464,6 +6403,34 @@ public object FfiConverterSequenceTypeClientEventEnvelope: FfiConverterRustBuffe
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeClientEventEnvelope.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeGuildFolderSnapshot: FfiConverterRustBuffer<List<GuildFolderSnapshot>> {
+    override fun read(buf: ByteBuffer): List<GuildFolderSnapshot> {
+        val len = buf.getInt()
+        return List<GuildFolderSnapshot>(len) {
+            FfiConverterTypeGuildFolderSnapshot.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<GuildFolderSnapshot>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeGuildFolderSnapshot.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<GuildFolderSnapshot>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeGuildFolderSnapshot.write(it, buf)
         }
     }
 }
@@ -5604,6 +6571,34 @@ public object FfiConverterSequenceTypePresenceSnapshot: FfiConverterRustBuffer<L
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypePresenceSnapshot.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypePrivateChannelSnapshot: FfiConverterRustBuffer<List<PrivateChannelSnapshot>> {
+    override fun read(buf: ByteBuffer): List<PrivateChannelSnapshot> {
+        val len = buf.getInt()
+        return List<PrivateChannelSnapshot>(len) {
+            FfiConverterTypePrivateChannelSnapshot.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<PrivateChannelSnapshot>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypePrivateChannelSnapshot.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<PrivateChannelSnapshot>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypePrivateChannelSnapshot.write(it, buf)
         }
     }
 }

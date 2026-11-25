@@ -26,7 +26,7 @@ impl ReadStateStore {
         let states = ready
             .get("read_state")
             .or_else(|| ready.get("read_states"))
-            .and_then(Value::as_array);
+            .and_then(versioned_entries);
 
         let Some(states) = states else {
             return;
@@ -142,6 +142,12 @@ pub fn guild_join_ack_id(timestamp_ms: i64) -> u64 {
     elapsed.saturating_mul(1 << 22)
 }
 
+fn versioned_entries(value: &Value) -> Option<&Vec<Value>> {
+    value
+        .as_array()
+        .or_else(|| value.get("entries")?.as_array())
+}
+
 fn parse_u64(value: Option<&Value>) -> Option<u64> {
     let value = value?;
     value
@@ -179,6 +185,23 @@ mod tests {
             store.states.get(&1).map(|state| state.mention_count),
             Some(2)
         );
+    }
+
+    #[test]
+    fn seeds_states_from_versioned_ready() {
+        let ready = serde_json::json!({
+            "read_state": {
+                "version": 3,
+                "entries": [
+                    {"channel_id": "1", "last_message_id": "10", "mention_count": 2}
+                ]
+            }
+        });
+        let mut store = ReadStateStore::new();
+        store.handle_ready(&ready);
+
+        assert_eq!(store.most_recent_message_id(1), Some(10));
+        assert_eq!(store.mention_count(1), 2);
     }
 
     #[test]

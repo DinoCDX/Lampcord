@@ -157,6 +157,27 @@ pub enum ClientCommand {
         reply_to_message_id: Option<u64>,
         reply_to_guild_id: Option<u64>,
     },
+    /// Loads a profile into `ClientSnapshot.profile`.
+    FetchProfile {
+        user_id: u64,
+        guild_id: Option<u64>,
+    },
+    /// Sets (or with `None`, clears) the custom status text.
+    SetCustomStatus {
+        text: Option<String>,
+    },
+    /// Loads the channel's pinned messages into `ClientSnapshot.pinned_messages`.
+    FetchPins {
+        channel_id: u64,
+    },
+    /// Uploads local files and sends them with `content` as one message.
+    SendAttachments {
+        channel_id: u64,
+        content: String,
+        file_paths: Vec<String>,
+        reply_to_message_id: Option<u64>,
+        reply_to_guild_id: Option<u64>,
+    },
     EditMessage {
         channel_id: u64,
         message_id: u64,
