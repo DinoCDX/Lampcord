@@ -269,16 +269,7 @@ fun PollView(
                                         val channelId = message.channel_id
                                         val messageId = message.id
 
-                                        val toRemove = myVotedAnswerIds - selectedAnswerIds
-                                        val toAdd = selectedAnswerIds - myVotedAnswerIds
-
-                                        var updatedMsg: Message? = null
-                                        for (ansId in toRemove) {
-                                            updatedMsg = messageApi.unvotePollAnswer(channelId, messageId, ansId) ?: updatedMsg
-                                        }
-                                        for (ansId in toAdd) {
-                                            updatedMsg = messageApi.votePollAnswer(channelId, messageId, ansId) ?: updatedMsg
-                                        }
+                                        val updatedMsg = messageApi.votePollAnswers(channelId, messageId, selectedAnswerIds)
 
                                         if (updatedMsg != null) {
                                             updatedMsg.poll?.let { currentPoll = it }
