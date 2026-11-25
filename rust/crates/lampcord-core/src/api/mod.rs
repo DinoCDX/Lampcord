@@ -116,7 +116,10 @@ where
     Ok(serde_json::from_str::<Resp>(&response.body)?)
 }
 
-pub async fn send_empty<T, S>(client: &RestClient<T, S>, request: RestRequest) -> Result<(), ApiError>
+pub async fn send_empty<T, S>(
+    client: &RestClient<T, S>,
+    request: RestRequest,
+) -> Result<(), ApiError>
 where
     T: RestTransport,
     S: CaptchaSolver,

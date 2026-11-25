@@ -578,7 +578,9 @@ impl<T: GatewayTransport, U: GatewayUrlProvider> GatewayClient<T, U> {
                                             if let Some(refreshed) = data
                                                 .and_then(|data| data.get("auth_token"))
                                                 .and_then(Value::as_str)
-                                                .filter(|refreshed| !refreshed.is_empty() && *refreshed != token)
+                                                .filter(|refreshed| {
+                                                    !refreshed.is_empty() && *refreshed != token
+                                                })
                                             {
                                                 self.session.rotate_token(refreshed);
                                                 if let Ok(mut cache) = self.cache.lock() {
